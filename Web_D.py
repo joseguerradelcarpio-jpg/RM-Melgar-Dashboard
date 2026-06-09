@@ -18,8 +18,8 @@ default_params = {
     'res_g': 1.0, 'res_e': 0.5, 'res_p': 0.0,
     'mod_visita_g': 0.15, 'mod_visita_e': 0.15, 'mod_local_e': -0.15, 'mod_local_p': -0.30,
     'premio_n3_g': 0.30, 'premio_n3_e': 0.15, 'castigo_n1_p': -0.30, 'castigo_n1_e': -0.15,
-    'gol_activo': False, 'gol_umbral': 3, 'gol_bono': 0.10,
-    'novedad_activo': False, 'novedad_bono': 0.15, 'novedad_limite': 1.05
+    'gol_activo': True, 'gol_umbral': 3, 'gol_bono': 0.10,
+    'novedad_activo': True, 'novedad_bono': 0.15, 'novedad_limite': 1.05
 }
 
 if 'inicializado' not in st.session_state:
