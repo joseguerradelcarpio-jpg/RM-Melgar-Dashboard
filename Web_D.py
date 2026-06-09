@@ -223,9 +223,9 @@ if df_raw is not None:
             # Lógica de Cross-Highlighting
             df_plot = df_subset.copy()
             
-            # ---> LA SOLUCIÓN: Convertir Ingresos a número puro para que Plotly no lo oculte
-            df_plot['Ingresos'] = pd.to_numeric(df_plot['Ingresos'], errors='coerce').fillna(0)
-
+            # TU SOLUCIÓN: Multiplicar las variables limpias que sí funcionan
+            df_plot['Ingresos_Seguros'] = df_plot['Yield_Total'] * df_plot['Asistencia']
+            
             if seleccionados:
                 df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
                 df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['año'], 'Otros')
@@ -246,7 +246,7 @@ if df_raw is not None:
                     'Asistencia': ':,.0f', 
                     'Yield_Total': ':.2f', 
                     'factor_sol': True, 
-                    'Ingresos': ':,.2f',  # Ahora que es número estricto, Plotly sí lo leerá
+                    'Ingresos_Seguros': ':,.2f', # <-- Tu variable matemática
                     'año': False,
                     'Color_Final': False, 
                     'Texto_Final': False
@@ -273,6 +273,7 @@ if df_raw is not None:
                 ci_lower = df_pred['mean_ci_lower']
                 ci_upper = df_pred['mean_ci_upper']
                 
+                # 1. Capa de la Sombra (Intervalo de Confianza)
                 fig.add_trace(go.Scatter(
                     x=np.concatenate([x_lin, x_lin[::-1]]),
                     y=np.concatenate([ci_upper, ci_lower[::-1]]),
@@ -283,6 +284,7 @@ if df_raw is not None:
                     showlegend=False
                 ))
                 
+                # 2. Capa de la Línea de Tendencia (Punteada negra)
                 fig.add_trace(go.Scatter(
                     x=x_lin, y=y_lin,
                     mode='lines',
@@ -291,6 +293,7 @@ if df_raw is not None:
                     showlegend=False
                 ))
                 
+                # 3. Ajuste Visual: Movemos la sombra y la línea al fondo
                 fig.data = fig.data[-2:] + fig.data[:-2]
             # === FIN DE NUEVO CÓDIGO ===
             
