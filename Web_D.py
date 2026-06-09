@@ -7,6 +7,7 @@ from datetime import datetime
 import io
 import statsmodels.api as sm # <-- NUEVA LÍNEA
 import os # Añade esto junto a tus otros imports al inicio (pandas, numpy, etc.)
+import plotly.graph_objects as go
 # =========================================================
 # 1. CONFIGURACIÓN DE LA PÁGINA Y ESTADO DE SESIÓN
 # =========================================================
@@ -567,19 +568,34 @@ if df_raw is not None:
                 hover_data=['Rival']
             )
             
-            # Ajuste de diseño: Fondo blanco, altura y un margen superior (t=80) para los títulos
-            fig_yield.update_layout(
-                plot_bgcolor='white', 
-                height=550, 
-                margin=dict(t=80) 
-            )
-            
-            # Desvincular ejes para no mezclar los precios de Sur con Occidente
+            # Ajuste de diseño y separación estricta de los ejes
+            fig_yield.update_layout(plot_bgcolor='white', height=550, margin=dict(t=80))
             fig_yield.update_xaxes(matches=None, showgrid=True, gridcolor='lightgray', tickprefix="S/ ") 
             fig_yield.update_yaxes(matches=None, showgrid=True, gridcolor='lightgray')
             
-            # Limpiar títulos automáticos y separarlos del borde del gráfico
+            # Limpiar títulos automáticos
             fig_yield.for_each_annotation(lambda a: a.update(text=f"<b>{a.text.split('=')[-1]}</b>", y=1.05))
+            
+            # AGREGAR LÍNEA DE TENDENCIA GENERAL MANUALMENTE (Motor Statsmodels)
+            for i, tribuna in enumerate(['Sur', 'Oriente', 'Occidente']):
+                df_sub = df_elasticidad[df_elasticidad['Tribuna'] == tribuna]
+                if len(df_sub) > 1:
+                    import statsmodels.api as sm
+                    # Calcular la regresión
+                    X_val = sm.add_constant(df_sub['Ticket_Promedio'])
+                    modelo_lin = sm.OLS(df_sub['Asistencia'], X_val).fit()
+                    
+                    # Generar los puntos para dibujar la línea
+                    x_rango = np.linspace(df_sub['Ticket_Promedio'].min(), df_sub['Ticket_Promedio'].max(), 10)
+                    y_pred = modelo_lin.predict(sm.add_constant(x_rango))
+                    
+                    # Inyectar la línea en el gráfico correspondiente
+                    fig_yield.add_trace(
+                        go.Scatter(x=x_rango, y=y_pred, mode='lines', 
+                                   line=dict(color='black', width=2, dash='dot'), 
+                                   showlegend=False, hoverinfo='skip'),
+                        row=1, col=i+1
+                    )
             
             st.plotly_chart(fig_yield, use_container_width=True)
             
