@@ -235,7 +235,7 @@ if df_raw is not None:
             # Preparar textos formateados para la tarjeta flotante
             df_plot['Hover_Asistencia'] = df_plot['Asistencia'].apply(lambda x: f"{x:,.0f}")
             df_plot['Hover_Ingresos'] = df_plot['Ingresos'].apply(lambda x: f"S/ {x:,.2f}")
-            df_plot['Hover_Yield'] = df_plot['Ticket_Promedio'].apply(lambda x: f"S/ {x:,.2f}")
+            df_plot['Hover_Yield'] = df_plot['Yield_Total'].apply(lambda x: f"S/ {x:,.2f}")
             # Extraer solo la fecha (Y-M-D)
             df_plot['Fecha_Corta'] = df_plot['fecha_real'].astype(str).str[:10]
 
