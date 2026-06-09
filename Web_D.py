@@ -339,30 +339,35 @@ if df_raw is not None:
                 
             # Gráfico 2: Migración de Tribunas (Análisis de Share Porcentual)
             with c2:
-                # Agrupamos promedios absolutos para ver la proporción
+                # 1. Agrupamos por factor_sol y sumamos las asistencias
                 tribunas = ['asistentes_sur', 'asistentes_oriente', 'asistentes_occidente']
-                df_promedios = df_clima.groupby('factor_sol')[tribunas].mean().reset_index()
+                df_promedios = df_clima.groupby('factor_sol')[tribunas].mean()
                 
-                # Transformar datos para Plotly (Melt)
-                df_melt = df_promedios.melt(id_vars='factor_sol', value_vars=tribunas, var_name='Tribuna', value_name='Promedio_Asistentes')
+                # 2. NORMALIZACIÓN MANUAL: Convertimos a porcentajes (0-100) antes de graficar
+                df_norm = df_promedios.div(df_promedios.sum(axis=1), axis=0) * 100
+                df_norm = df_norm.reset_index()
                 
-                # Limpiar los nombres de las tribunas para que se vean bien en la leyenda
+                # 3. Transformar para Plotly (Melt)
+                df_melt = df_norm.melt(id_vars='factor_sol', value_vars=tribunas, var_name='Tribuna', value_name='Porcentaje')
                 df_melt['Tribuna'] = df_melt['Tribuna'].str.replace('asistentes_', '').str.capitalize()
                 
+                # 4. Graficar (usando barmode='stack', que es el estándar)
                 fig_share = px.bar(
-                    df_melt, x='factor_sol', y='Promedio_Asistentes', color='Tribuna',
+                    df_melt, x='factor_sol', y='Porcentaje', color='Tribuna',
                     category_orders={'factor_sol': orden_clima},
                     title="2. Distribución y Migración Interna (Share %)",
-                    barmode='100%', # Convierte barras absolutas en porcentajes
+                    barmode='stack',
                     text_auto='.1f',
                     color_discrete_map={'Sur': '#F44336', 'Oriente': '#4CAF50', 'Occidente': '#2196F3'}
                 )
+                
                 fig_share.update_layout(
                     xaxis_title="Condición Térmica", 
                     yaxis_title="Participación de Mercado (%)",
-                    plot_bgcolor='white'
+                    plot_bgcolor='white',
+                    yaxis=dict(range=[0, 100])
                 )
-                fig_share.update_traces(texttemplate='%{value:.1f}%', textposition='inside')
+                fig_share.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
                 st.plotly_chart(fig_share, use_container_width=True)
                 
             st.markdown("""
