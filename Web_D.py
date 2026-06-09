@@ -302,14 +302,13 @@ if df_raw is not None:
         st.download_button("Descargar Excel Calibrado", data=buf.getvalue(), file_name=f"{prefijo}_{fecha}.xlsx")
 
     with tab2:
-        st.markdown("### Análisis de Calendario y Efecto del Fin de Semana")
+        st.markdown("### Análisis de Calendario y Feriados")
         
-        # FILTRO DINÁMICO POR EQUIPOS (CON LA NUEVA TERMINOLOGÍA)
+        # FILTRO DINÁMICO POR EQUIPOS
         alta_demanda = ['Universitario', 'Alianza Lima', 'Sporting Cristal', 'Cienciano']
         equipos_disp_t2 = sorted(df_g['visitante'].unique())
         equipos_def_t2 = [e for e in equipos_disp_t2 if e not in alta_demanda]
         
-        # Es vital usar un 'key' único para que Streamlit no confunda este filtro con el de la pestaña 3
         equipos_calendario = st.multiselect(
             "Filtro de Rivales (Calendario): Selecciona qué equipos analizar", 
             options=equipos_disp_t2, 
@@ -320,23 +319,19 @@ if df_raw is not None:
         df_cal = df_g[df_g['visitante'].isin(equipos_calendario)].copy()
         
         if not df_cal.empty:
-            # Asegurar el orden lógico de los días de la semana en la gráfica
             df_cal['dia_semana'] = df_cal['dia_semana'].str.strip().str.lower()
             orden_dias = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
-            
-            # Crear una segmentación agregada: Fin de semana vs Día de semana para mitigar la falta de data
             df_cal['Tipo_Dia'] = np.where(df_cal['dia_semana'].isin(['sábado', 'domingo']), 'Fin de Semana', 'Día de Semana')
             
             c1, c2 = st.columns(2)
             
             with c1:
-                # Gráfico 1: Desglose por día detallado
                 fig_dias = px.box(
                     df_cal, x='dia_semana', y='Asistencia',
                     color='dia_semana',
                     category_orders={'dia_semana': orden_dias},
-                    title="1. Distribución de Asistencia por Día de la Semana",
-                    points='all', # Muestra absolutamente todos los partidos como puntos individuales
+                    title="1. Distribución de Asistencia por Día",
+                    points='all',
                     color_discrete_sequence=px.colors.qualitative.Safe
                 )
                 fig_dias.update_layout(showlegend=False, plot_bgcolor='white', xaxis_title=None, yaxis_title="Asistencia")
@@ -345,11 +340,10 @@ if df_raw is not None:
                 st.plotly_chart(fig_dias, use_container_width=True)
                 
             with c2:
-                # Gráfico 2: Agrupación Macro (Fin de semana vs Día de semana)
                 fig_macro = px.box(
                     df_cal, x='Tipo_Dia', y='Asistencia',
                     color='Tipo_Dia',
-                    title="2. Impacto Agregado: Fin de Semana vs Día de Semana",
+                    title="2. Impacto Agregado: Fin de Semana vs Día Laborable",
                     points='all',
                     color_discrete_sequence=['#4CAF50', '#FF5722']
                 )
@@ -357,13 +351,35 @@ if df_raw is not None:
                 fig_macro.update_xaxes(showgrid=True, gridcolor='lightgray')
                 fig_macro.update_yaxes(showgrid=True, gridcolor='lightgray')
                 st.plotly_chart(fig_macro, use_container_width=True)
+            
+            st.markdown("---")
+            
+            # ANÁLISIS DE FERIADOS LARGOS Aislando Fines de Semana
+            if 'feriado_largo' in df_cal.columns:
+                df_cal['Es_Feriado'] = np.where(df_cal['feriado_largo'] == 1, 'Feriado Largo', 'Fin de Semana Normal')
+                df_finde = df_cal[df_cal['Tipo_Dia'] == 'Fin de Semana'].copy()
                 
-            st.markdown("""
-            ### 💡 Conclusión del Análisis de Calendario
-            El gráfico de la izquierda permite identificar comportamientos atípicos en días particulares. Debido a la dispersión o escasez de partidos en días laborables, el gráfico macro de la derecha consolida la masa de datos para cuantificar la pérdida base de asistencia cuando la programación del torneo no permite jugar en sábado o domingo.
-            """)
+                if not df_finde.empty:
+                    fig_feriado = px.box(
+                        df_finde, x='Es_Feriado', y='Asistencia',
+                        color='Es_Feriado',
+                        title="3. Costo de Oportunidad: Feriado Largo vs Fin de Semana Normal",
+                        points='all',
+                        color_discrete_sequence=['#9C27B0', '#00BCD4']
+                    )
+                    fig_feriado.update_layout(showlegend=False, plot_bgcolor='white', xaxis_title=None, yaxis_title="Asistencia Orgánica")
+                    fig_feriado.update_xaxes(showgrid=True, gridcolor='lightgray')
+                    fig_feriado.update_yaxes(showgrid=True, gridcolor='lightgray')
+                    
+                    # Usamos columnas para centrar un poco el gráfico inferior
+                    _, col_centro, _ = st.columns([1, 2, 1])
+                    with col_centro:
+                        st.plotly_chart(fig_feriado, use_container_width=True)
+                        st.markdown("""
+                        **Nota:** Este gráfico aísla exclusivamente los sábados y domingos. Mide si la coincidencia con un feriado largo contrae la asistencia debido al traslado del público local hacia otras actividades o destinos.
+                        """)
         else:
-            st.warning("Por favor, selecciona al menos un equipo en el filtro superior para desplegar el análisis.")
+            st.warning("Por favor, selecciona al menos un equipo en el filtro superior.")
         
     with tab3:
         st.markdown("### Análisis de Confort Térmico y Migración")
