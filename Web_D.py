@@ -493,65 +493,92 @@ if df_raw is not None:
 
     with tab5:
         st.markdown("### Elasticidad Precio de la Demanda (Curvas de Yield)")
-        st.info("Este módulo calcula automáticamente el Ticket Promedio Real (Ingreso / Asistentes) por tribuna y traza la curva de sensibilidad al precio mediante regresión lineal.")
+        st.info("Este módulo calcula el Ticket Promedio Real y extrae el coeficiente OLS. Los puntos están coloreados por año para identificar el impacto de las políticas de precios recientes.")
         
-        # Filtro de equipos para aislar el comportamiento
+        equipos_disp_t5 = sorted(df_g['visitante'].unique())
+        equipos_def_t5 = [e for e in equipos_disp_t5 if e not in titanes]
+        
         equipos_yield = st.multiselect(
-            "Filtro de Rivales: Excluye a los Titanes para ver la sensibilidad de la demanda orgánica", 
-            options=equipos_disp_t4, 
-            default=equipos_def_t4,
+            "Filtro de Rivales: Aisla el comportamiento orgánico", 
+            options=equipos_disp_t5, 
+            default=equipos_def_t5,
             key="multiselect_tab5"
         )
         
         df_y = df_g[df_g['visitante'].isin(equipos_yield)].copy()
         
-        # Verificar que existan las columnas financieras
         cols_fin = ['ingresos_sur', 'asistentes_sur', 'ingresos_oriente', 'asistentes_oriente', 'ingresos_occidente', 'asistentes_occidente']
         if all(col in df_y.columns for col in cols_fin):
             
-            # 1. Cálculo matemático del Yield (Ticket Promedio Real)
-            # Usamos np.where para evitar errores de división por cero
+            # 1. Cálculo del Yield
             df_y['Yield_Sur'] = np.where(df_y['asistentes_sur'] > 0, df_y['ingresos_sur'] / df_y['asistentes_sur'], np.nan)
             df_y['Yield_Oriente'] = np.where(df_y['asistentes_oriente'] > 0, df_y['ingresos_oriente'] / df_y['asistentes_oriente'], np.nan)
             df_y['Yield_Occidente'] = np.where(df_y['asistentes_occidente'] > 0, df_y['ingresos_occidente'] / df_y['asistentes_occidente'], np.nan)
             
-            # 2. Reestructurar datos para graficar las 3 curvas juntas (Melt)
+            # 2. Reestructurar datos (Melt) y preparar la columna Año
             dfs_tribunas = []
             for tribuna in ['Sur', 'Oriente', 'Occidente']:
-                df_temp = df_y[['visitante', f'Yield_{tribuna}', f'asistentes_{tribuna.lower()}']].copy()
-                df_temp.columns = ['Rival', 'Ticket_Promedio', 'Asistencia']
+                df_temp = df_y[['visitante', 'año', f'Yield_{tribuna}', f'asistentes_{tribuna.lower()}']].copy()
+                df_temp.columns = ['Rival', 'año', 'Ticket_Promedio', 'Asistencia']
                 df_temp['Tribuna'] = tribuna
                 dfs_tribunas.append(df_temp)
                 
             df_elasticidad = pd.concat(dfs_tribunas).dropna()
+            df_elasticidad['año'] = df_elasticidad['año'].astype(str) # Forzar a texto para colores discretos
             
-            # 3. Graficar con línea de tendencia OLS (Mínimos Cuadrados Ordinarios)
+            # --- MOTOR MATEMÁTICO: CÁLCULO DE ELASTICIDAD OLS ---
+            st.markdown("#### 📊 Coeficientes de Sensibilidad Macro")
+            kpi1, kpi2, kpi3 = st.columns(3)
+            
+            def calcular_elasticidad(df_trib):
+                if len(df_trib) < 5: return "N/A", "Insuficientes datos"
+                X = df_trib['Ticket_Promedio']
+                Y = df_trib['Asistencia']
+                X = sm.add_constant(X)
+                modelo = sm.OLS(Y, X).fit()
+                beta_1 = modelo.params['Ticket_Promedio']
+                
+                promedio_P = df_trib['Ticket_Promedio'].mean()
+                promedio_Q = df_trib['Asistencia'].mean()
+                elasticidad = beta_1 * (promedio_P / promedio_Q)
+                
+                if elasticidad > 0: estado = "Anómala (Pricing Reactivo al entorno)"
+                elif abs(elasticidad) > 1: estado = "Elástica (Muy Sensible)"
+                else: estado = "Inelástica (Rígida)"
+                
+                return round(elasticidad, 2), estado
+
+            for idx, tribuna in enumerate(['Sur', 'Oriente', 'Occidente']):
+                df_filtro = df_elasticidad[df_elasticidad['Tribuna'] == tribuna]
+                coef, est = calcular_elasticidad(df_filtro)
+                col = [kpi1, kpi2, kpi3][idx]
+                col.metric(f"Elasticidad: {tribuna}", f"{coef} Ed", est)
+            
+            st.markdown("---")
+            
+            # 3. Gráfico Principal (Facetado por Tribuna y coloreado por Año)
+            paleta_años = {'2023': '#D32F2F', '2024': '#1976D2', '2025': '#388E3C', '2026': '#FF8F00'}
+            
             fig_yield = px.scatter(
-                df_elasticidad, x='Ticket_Promedio', y='Asistencia', color='Tribuna',
-                trendline="ols", # Esto traza la línea de elasticidad automáticamente
-                title="Curvas de Demanda por Tribuna (Asistencia vs Ticket Promedio)",
-                color_discrete_map={'Sur': '#F44336', 'Oriente': '#4CAF50', 'Occidente': '#2196F3'},
+                df_elasticidad, x='Ticket_Promedio', y='Asistencia', 
+                color='año', facet_col='Tribuna', 
+                trendline="ols", trendline_scope="overall", # Una sola línea de tendencia general por tribuna
+                title="Evolución de Pricing y Demanda",
+                color_discrete_map=paleta_años,
                 hover_data=['Rival']
             )
             
-            fig_yield.update_layout(
-                xaxis_title="Ticket Promedio Real (S/)", 
-                yaxis_title="Volumen de Asistencia",
-                plot_bgcolor='white',
-                height=600
-            )
-            fig_yield.update_xaxes(showgrid=True, gridcolor='lightgray', tickprefix="S/ ")
-            fig_yield.update_yaxes(showgrid=True, gridcolor='lightgray')
+            fig_yield.update_layout(plot_bgcolor='white', height=500)
+            # Desvincular los ejes para que Sur no se estire con los precios de Occidente
+            fig_yield.update_xaxes(showgrid=True, gridcolor='lightgray', tickprefix="S/ ", matches=None) 
+            fig_yield.update_yaxes(showgrid=True, gridcolor='lightgray', matches=None)
+            
+            # Limpiar los títulos automáticos molestos de Plotly en los subgráficos
+            fig_yield.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
             
             st.plotly_chart(fig_yield, use_container_width=True)
             
-            st.markdown("""
-            ### 💡 Lectura de Elasticidad (Revenue Management)
-            * **Pendiente Negativa Fuerte (Línea muy inclinada hacia abajo):** Indica alta sensibilidad. Si subes el precio S/ 1, la asistencia cae drásticamente. (Suele ocurrir en Sur).
-            * **Pendiente Plana (Línea casi horizontal):** Indica demanda inelástica. Puedes subir el precio y el volumen de gente se mantendrá casi intacto, lo que maximiza fuertemente la recaudación. (Suele ocurrir en Occidente).
-            """)
         else:
             st.error("No se detectaron las columnas de ingresos y asistentes por tribuna en la base de datos.")
-
 else:
     st.warning("👈 Por favor, carga tu archivo Excel en el panel lateral para iniciar el simulador.")
