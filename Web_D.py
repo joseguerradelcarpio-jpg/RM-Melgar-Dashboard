@@ -213,37 +213,53 @@ if df_raw is not None:
         
         def plot_master(df_subset, titulo):
             df_plot = df_subset.copy()
+            
+            # Blindaje 1: Asegurar que visitante existe para poder resaltarlo
+            visitante_col = df_plot.get('visitante', pd.Series([''] * len(df_plot)))
+            
             if seleccionados:
-                df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
-                df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['año'], 'Otros')
-                df_plot['Texto_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['visitante'], '')
+                df_plot['Es_Resaltado'] = visitante_col.isin(seleccionados)
+                df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot.get('año', 'Otros'), 'Otros')
+                df_plot['Texto_Final'] = np.where(df_plot['Es_Resaltado'], visitante_col, '')
                 cmap = {**paleta, 'Otros': '#E0E0E0'}
             else:
-                df_plot['Color_Final'] = df_plot['año']
-                df_plot['Texto_Final'] = df_plot['visitante']
+                df_plot['Color_Final'] = df_plot.get('año', 'Desconocido')
+                df_plot['Texto_Final'] = visitante_col
                 cmap = paleta
 
-            df_plot['Hover_Asistencia'] = pd.to_numeric(df_plot['Asistencia'], errors='coerce').fillna(0).apply(lambda x: f"{x:,.0f}")
-            df_plot['Hover_Ingresos'] = pd.to_numeric(df_plot['Ingresos'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
-            df_plot['Hover_Yield'] = pd.to_numeric(df_plot['Yield_Total'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
-            df_plot['Fecha_Corta'] = df_plot['fecha_real'].astype(str).str[:10]
-
-            # === BLINDAJE DINÁMICO PARA LA COLUMNA DE POSICIÓN ===
-            # Si el Excel tiene las 8 variables, usa la nueva. Si es el viejo, usa la clásica.
+            # === BLINDAJE ABSOLUTO CON .get() ===
+            # Extraemos los datos suavemente. Si no existen, ponemos 'N/A'
+            df_plot['Hover_Visita'] = visitante_col
+            df_plot['Hover_Fecha'] = df_plot.get('fecha_real', pd.Series(dtype=str)).astype(str).str[:10]
+            
+            # Buscar la posición en cualquiera de sus posibles versiones de Excel
             if 'pos_local_acumulado_jornada' in df_plot.columns:
-                col_pos = 'pos_local_acumulado_jornada'
+                df_plot['Hover_Pos'] = df_plot['pos_local_acumulado_jornada']
             elif 'posicion_local' in df_plot.columns:
-                col_pos = 'posicion_local'
+                df_plot['Hover_Pos'] = df_plot['posicion_local']
+            elif 'posicion_loc' in df_plot.columns: # Por si Excel cortó el nombre
+                df_plot['Hover_Pos'] = df_plot['posicion_loc']
             else:
-                df_plot['posicion_fantasma'] = "N/A"
-                col_pos = 'posicion_fantasma'
+                df_plot['Hover_Pos'] = "N/A"
 
+            df_plot['Hover_Clima'] = df_plot.get('factor_sol', 'N/A')
+            df_plot['Hover_Hora'] = df_plot.get('hora', 'N/A')
+
+            # Variables numéricas protegidas contra celdas vacías
+            df_plot['Hover_Asistencia'] = pd.to_numeric(df_plot.get('Asistencia', 0), errors='coerce').fillna(0).apply(lambda x: f"{x:,.0f}")
+            df_plot['Hover_Ingresos'] = pd.to_numeric(df_plot.get('Ingresos', 0), errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
+            df_plot['Hover_Yield'] = pd.to_numeric(df_plot.get('Yield_Total', 0), errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
+
+            # Plotly Express usando EXCLUSIVAMENTE las variables seguras que acabamos de crear
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
                 color_discrete_map=cmap,
                 title=titulo,
-                custom_data=['visitante', 'Fecha_Corta', col_pos, 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
+                custom_data=[
+                    'Hover_Visita', 'Hover_Fecha', 'Hover_Pos', 'Hover_Clima', 
+                    'Hover_Hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield'
+                ]
             )
             
             fig.update_traces(
@@ -260,6 +276,7 @@ if df_raw is not None:
                 )
             )
             
+            # --- Regresión OLS y Sombra ---
             df_trend = df_plot[['ipm_local_5', 'Asistencia']].dropna()
             
             if len(df_trend) > 2: 
