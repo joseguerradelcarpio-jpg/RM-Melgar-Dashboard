@@ -212,36 +212,28 @@ if df_raw is not None:
         
         # EL GRÁFICO BLINDADO DEFINITIVO
         def plot_master(df_subset, titulo):
-            # 1. Si no hay datos, mostramos un lienzo vacío sin colapsar
+            # Si no hay datos, devolvemos un gráfico vacío sin colapsar
             if df_subset.empty:
                 return go.Figure().update_layout(title=titulo + " (Sin datos)")
-            
+                
             df_plot = df_subset.copy()
             
-            # 2. INYECCIÓN FORZADA: Creamos TODAS las columnas que usará Plotly 
-            # antes de que pregunte por ellas. Adiós al KeyError.
+            # =======================================================
+            # 1. EL ESCUDO ANTI-KEYERROR 
+            # Garantiza que todas las columnas existan antes de leerlas
+            # =======================================================
             columnas_criticas = {
                 'visitante': 'Desconocido', 'año': 'Otros', 'fecha_real': 'N/A', 
                 'factor_sol': 'N/A', 'hora': 'N/A', 'Asistencia': 0, 
-                'Ingresos': 0, 'Yield_Total': 0, 'ipm_local_5': 0
+                'Ingresos': 0, 'Yield_Total': 0, 'ipm_local_5': 0,
+                'pos_local_acumulado_jornada': 'N/A', 'posicion_local': 'N/A'
             }
-            for col, val_por_defecto in columnas_criticas.items():
+            
+            for col, val_defecto in columnas_criticas.items():
                 if col not in df_plot.columns:
-                    df_plot[col] = val_por_defecto
-                    
-            # 3. Lógica aislada para la columna de Posición
-            pos_encontrada = 'N/A'
-            for posible_nombre in ['pos_local_acumulado_jornada', 'posicion_local', 'posicion_loc']:
-                if posible_nombre in df_plot.columns:
-                    pos_encontrada = posible_nombre
-                    break
-            
-            if pos_encontrada != 'N/A':
-                df_plot['Hover_Pos'] = df_plot[pos_encontrada]
-            else:
-                df_plot['Hover_Pos'] = 'N/A'
-            
-            # 4. Asignaciones directas sabiendo que las columnas 100% existen
+                    df_plot[col] = val_defecto
+
+            # 2. Lógica de Resaltado (Cross-Highlighting)
             if seleccionados:
                 df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
                 df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['año'], 'Otros')
@@ -251,17 +243,24 @@ if df_raw is not None:
                 df_plot['Color_Final'] = df_plot['año']
                 df_plot['Texto_Final'] = df_plot['visitante']
                 cmap = paleta
-                
+
+            # 3. Preparación Segura del Hover
             df_plot['Hover_Visita'] = df_plot['visitante']
             df_plot['Hover_Fecha'] = df_plot['fecha_real'].astype(str).str[:10]
             df_plot['Hover_Clima'] = df_plot['factor_sol']
             df_plot['Hover_Hora'] = df_plot['hora']
             
+            # Lee la posición de las nuevas variables o de la clásica
+            df_plot['Hover_Pos'] = np.where(df_plot['pos_local_acumulado_jornada'] != 'N/A', 
+                                            df_plot['pos_local_acumulado_jornada'], 
+                                            df_plot['posicion_local'])
+
+            # Formateo de Moneda y Números
             df_plot['Hover_Asistencia'] = pd.to_numeric(df_plot['Asistencia'], errors='coerce').fillna(0).apply(lambda x: f"{x:,.0f}")
             df_plot['Hover_Ingresos'] = pd.to_numeric(df_plot['Ingresos'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
             df_plot['Hover_Yield'] = pd.to_numeric(df_plot['Yield_Total'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
 
-            # 5. Dibujo seguro del Scatter Plot
+            # 4. Dibujo del Gráfico
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
@@ -273,13 +272,14 @@ if df_raw is not None:
                 ]
             )
             
+            # La plantilla del hover que querías mejorar
             fig.update_traces(
                 marker=dict(size=14, line=dict(width=1, color='black')),
                 textposition='top right',
                 hovertemplate=(
                     "<b>%{customdata[0]}</b><br>" +
                     "Fecha: %{customdata[1]}<br>" +
-                    "Posición Acumulada: %{customdata[2]}<br>" +
+                    "Posición: %{customdata[2]}<br>" +
                     "Clima: %{customdata[3]} | Hora: %{customdata[4]}<br>" +
                     "Asistencia: %{customdata[5]}<br>" +
                     "Recaudación: %{customdata[6]}<br>" +
@@ -287,8 +287,10 @@ if df_raw is not None:
                 )
             )
             
-            # 6. Regresión OLS Estricta
+            # 5. Regresión OLS y Sombra de Confianza
             df_trend = df_plot[['ipm_local_5', 'Asistencia']].dropna()
+            # Evitamos calcular la tendencia con ceros inyectados por el escudo
+            df_trend = df_trend[(df_trend['ipm_local_5'] != 0) & (df_trend['Asistencia'] != 0)]
             
             if len(df_trend) > 2: 
                 x_val = df_trend['ipm_local_5'].values
