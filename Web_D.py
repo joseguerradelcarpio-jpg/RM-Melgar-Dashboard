@@ -214,45 +214,43 @@ if df_raw is not None:
         def plot_master(df_subset, titulo):
             df_plot = df_subset.copy()
             
-            # Blindaje 1: Asegurar que visitante existe para poder resaltarlo
-            visitante_col = df_plot.get('visitante', pd.Series([''] * len(df_plot)))
+            # Variables de segmentación extraídas sin corchetes
+            visitante_col = df_plot.get('visitante', pd.Series(['Desconocido'] * len(df_plot)))
+            anio_col = df_plot.get('año', pd.Series(['Otros'] * len(df_plot)))
             
             if seleccionados:
                 df_plot['Es_Resaltado'] = visitante_col.isin(seleccionados)
-                df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot.get('año', 'Otros'), 'Otros')
+                df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], anio_col, 'Otros')
                 df_plot['Texto_Final'] = np.where(df_plot['Es_Resaltado'], visitante_col, '')
                 cmap = {**paleta, 'Otros': '#E0E0E0'}
             else:
-                df_plot['Color_Final'] = df_plot.get('año', 'Desconocido')
+                df_plot['Color_Final'] = anio_col
                 df_plot['Texto_Final'] = visitante_col
                 cmap = paleta
 
-            # === BLINDAJE ABSOLUTO CON .get() ===
-            # Extraemos los datos suavemente. Si no existen, ponemos 'N/A'
+            # Fechas y textos protegidos
             df_plot['Hover_Visita'] = visitante_col
             df_plot['Hover_Fecha'] = df_plot.get('fecha_real', pd.Series(dtype=str)).astype(str).str[:10]
             
-            # Buscar la posición en cualquiera de sus posibles versiones de Excel
-            if 'pos_local_acumulado_jornada' in df_plot.columns:
-                df_plot['Hover_Pos'] = df_plot['pos_local_acumulado_jornada']
-            elif 'posicion_local' in df_plot.columns:
-                df_plot['Hover_Pos'] = df_plot['posicion_local']
-            elif 'posicion_loc' in df_plot.columns: # Por si Excel cortó el nombre
-                df_plot['Hover_Pos'] = df_plot['posicion_loc']
-            else:
-                df_plot['Hover_Pos'] = "N/A"
+            # >>> EL NÚCLEO DEL ERROR ARREGLADO: CERO CORCHETES <<<
+            df_plot['Hover_Pos'] = df_plot.get('pos_local_acumulado_jornada', 
+                                   df_plot.get('posicion_local', 
+                                   df_plot.get('posicion_loc', 'N/A')))
 
             df_plot['Hover_Clima'] = df_plot.get('factor_sol', 'N/A')
             df_plot['Hover_Hora'] = df_plot.get('hora', 'N/A')
 
-            # Variables numéricas protegidas contra celdas vacías
+            # Numéricos protegidos
             df_plot['Hover_Asistencia'] = pd.to_numeric(df_plot.get('Asistencia', 0), errors='coerce').fillna(0).apply(lambda x: f"{x:,.0f}")
             df_plot['Hover_Ingresos'] = pd.to_numeric(df_plot.get('Ingresos', 0), errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
             df_plot['Hover_Yield'] = pd.to_numeric(df_plot.get('Yield_Total', 0), errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
 
-            # Plotly Express usando EXCLUSIVAMENTE las variables seguras que acabamos de crear
+            # Ejes seguros para evitar colapso de Plotly
+            x_col = 'ipm_local_5' if 'ipm_local_5' in df_plot.columns else df_plot.columns[0]
+            y_col = 'Asistencia' if 'Asistencia' in df_plot.columns else df_plot.columns[0]
+
             fig = px.scatter(
-                df_plot, x='ipm_local_5', y='Asistencia', 
+                df_plot, x=x_col, y=y_col, 
                 color='Color_Final', text='Texto_Final',
                 color_discrete_map=cmap,
                 title=titulo,
@@ -277,44 +275,45 @@ if df_raw is not None:
             )
             
             # --- Regresión OLS y Sombra ---
-            df_trend = df_plot[['ipm_local_5', 'Asistencia']].dropna()
-            
-            if len(df_trend) > 2: 
-                x_val = df_trend['ipm_local_5'].values
-                y_val = df_trend['Asistencia'].values
+            if x_col in df_plot.columns and y_col in df_plot.columns:
+                df_trend = df_plot[[x_col, y_col]].dropna()
                 
-                X_sm = sm.add_constant(x_val)
-                modelo = sm.OLS(y_val, X_sm).fit()
-                
-                x_lin = np.linspace(x_val.min(), x_val.max(), 100)
-                X_pred = sm.add_constant(x_lin)
-                
-                predicciones = modelo.get_prediction(X_pred)
-                df_pred = predicciones.summary_frame(alpha=0.05)
-                
-                y_lin = df_pred['mean']
-                ci_lower = df_pred['mean_ci_lower']
-                ci_upper = df_pred['mean_ci_upper']
-                
-                fig.add_trace(go.Scatter(
-                    x=np.concatenate([x_lin, x_lin[::-1]]),
-                    y=np.concatenate([ci_upper, ci_lower[::-1]]),
-                    fill='toself',
-                    fillcolor='rgba(200, 200, 200, 0.4)', 
-                    line=dict(color='rgba(255,255,255,0)'),
-                    hoverinfo="skip",
-                    showlegend=False
-                ))
-                
-                fig.add_trace(go.Scatter(
-                    x=x_lin, y=y_lin,
-                    mode='lines',
-                    line=dict(color='black', width=2, dash='dash'),
-                    hoverinfo="skip",
-                    showlegend=False
-                ))
-                
-                fig.data = fig.data[-2:] + fig.data[:-2]
+                if len(df_trend) > 2: 
+                    x_val = df_trend[x_col].values
+                    y_val = df_trend[y_col].values
+                    
+                    X_sm = sm.add_constant(x_val)
+                    modelo = sm.OLS(y_val, X_sm).fit()
+                    
+                    x_lin = np.linspace(x_val.min(), x_val.max(), 100)
+                    X_pred = sm.add_constant(x_lin)
+                    
+                    predicciones = modelo.get_prediction(X_pred)
+                    df_pred = predicciones.summary_frame(alpha=0.05)
+                    
+                    y_lin = df_pred['mean']
+                    ci_lower = df_pred['mean_ci_lower']
+                    ci_upper = df_pred['mean_ci_upper']
+                    
+                    fig.add_trace(go.Scatter(
+                        x=np.concatenate([x_lin, x_lin[::-1]]),
+                        y=np.concatenate([ci_upper, ci_lower[::-1]]),
+                        fill='toself',
+                        fillcolor='rgba(200, 200, 200, 0.4)', 
+                        line=dict(color='rgba(255,255,255,0)'),
+                        hoverinfo="skip",
+                        showlegend=False
+                    ))
+                    
+                    fig.add_trace(go.Scatter(
+                        x=x_lin, y=y_lin,
+                        mode='lines',
+                        line=dict(color='black', width=2, dash='dash'),
+                        hoverinfo="skip",
+                        showlegend=False
+                    ))
+                    
+                    fig.data = fig.data[-2:] + fig.data[:-2]
             
             fig.update_layout(
                 legend=dict(orientation="v", yanchor="top", y=0.99, xanchor="left", x=0.01),
