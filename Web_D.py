@@ -5,14 +5,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import io
-import statsmodels.api as sm
-import os
-
+import statsmodels.api as sm # <-- NUEVA LÍNEA
+import os # Añade esto junto a tus otros imports al inicio (pandas, numpy, etc.)
 # =========================================================
 # 1. CONFIGURACIÓN DE LA PÁGINA Y ESTADO DE SESIÓN
 # =========================================================
 st.set_page_config(page_title="FBC Melgar - Revenue Management Dashboard", layout="wide")
 
+# Parámetros base con bono de novedad directo al IPM
 default_params = {
     'h1': 0.40, 'h2': 0.25, 'h3': 0.15, 'h4': 0.10, 'h5': 0.10,
     'res_g': 1.0, 'res_e': 0.5, 'res_p': 0.0,
@@ -80,6 +80,7 @@ with st.sidebar.expander("4. Modificadores Especiales"):
 def procesar_datos(df_raw, params):
     df = df_raw.copy()
     
+    # 1. Limpieza RIGUROSA de todas las variables que se van a recalcular
     cols_a_borrar = [
         'local_H1', 'local_H2', 'local_H3', 'local_H4', 'local_H5',
         'visita_H1', 'visita_H2', 'visita_H3', 'visita_H4', 'visita_H5',
@@ -97,6 +98,7 @@ def procesar_datos(df_raw, params):
     df['res_local'] = np.where(df['goles_local'] > df['goles_visitante'], 'G', np.where(df['goles_local'] == df['goles_visitante'], 'E', 'P'))
     df['res_visita'] = np.where(df['goles_visitante'] > df['goles_local'], 'G', np.where(df['goles_visitante'] == df['goles_local'], 'E', 'P'))
 
+    # Tabla en la Sombra
     puntos = {}
     nivel_l, nivel_v = [], []
     titanes = ['Universitario', 'Alianza Lima', 'Sporting Cristal', 'Cienciano']
@@ -146,6 +148,7 @@ def procesar_datos(df_raw, params):
     df['irr_local'] = df.apply(lambda r: calc_irr(r['res_local'], 'Local', r['nivel_visita'], r['goles_local'], r['goles_visitante']), axis=1)
     df['irr_visita'] = df.apply(lambda r: calc_irr(r['res_visita'], 'Visita', r['nivel_local'], r['goles_local'], r['goles_visitante']), axis=1)
 
+    # Historial y Ponderación
     df_h = pd.concat([
         df[['fecha_real', 'local', 'irr_local']].rename(columns={'local':'eq', 'irr_local':'irr'}),
         df[['fecha_real', 'visitante', 'irr_visita']].rename(columns={'visitante':'eq', 'irr_visita':'irr'})
@@ -154,12 +157,15 @@ def procesar_datos(df_raw, params):
     for i in range(1, 6): df_h[f'H{i}'] = df_h.groupby('eq')['irr'].shift(i)
     df_h.fillna(0, inplace=True)
     
+    # Unir variables H para Local
     df = pd.merge(df, df_h[['fecha_real', 'eq', 'H1', 'H2', 'H3', 'H4', 'H5']], left_on=['fecha_real', 'local'], right_on=['fecha_real', 'eq'], how='left').drop('eq', axis=1)
     df.rename(columns={f'H{i}': f'local_H{i}' for i in range(1, 6)}, inplace=True)
 
+    # Unir variables H para Visita
     df = pd.merge(df, df_h[['fecha_real', 'eq', 'H1', 'H2', 'H3', 'H4', 'H5']], left_on=['fecha_real', 'visitante'], right_on=['fecha_real', 'eq'], how='left').drop('eq', axis=1)
     df.rename(columns={f'H{i}': f'visita_H{i}' for i in range(1, 6)}, inplace=True)
 
+    # Cálculo Final del IPM
     df['ipm_local_5'] = (df['local_H1']*params['h1']) + (df['local_H2']*params['h2']) + (df['local_H3']*params['h3']) + (df['local_H4']*params['h4']) + (df['local_H5']*params['h5'])
     df['ipm_visita_5'] = (df['visita_H1']*params['h1']) + (df['visita_H2']*params['h2']) + (df['visita_H3']*params['h3']) + (df['visita_H4']*params['h4']) + (df['visita_H5']*params['h5'])
     
@@ -176,31 +182,34 @@ st.title("📈 Dashboard Interactivo de Demanda")
 
 archivo_por_defecto = 'Dataset_Tesis_8_Variables2.xlsx'
 
+# Lógica de Carga Dual (Manual o Automática)
 df_raw = None
 
 if archivo_cargado is not None:
+    # 1. Prioridad al archivo que suba el usuario manualmente
     df_raw = pd.read_excel(archivo_cargado)
     st.sidebar.success("✅ Archivo personalizado cargado.")
 elif os.path.exists(archivo_por_defecto):
+    # 2. Si no suben nada, lee el archivo precargado en el servidor
     df_raw = pd.read_excel(archivo_por_defecto)
     st.sidebar.info("ℹ️ Usando base de datos oficial por defecto.")
 else:
+    # 3. Mensaje de error si falta el archivo
     st.warning("⚠️ No se encontró la base de datos. Por favor, carga el archivo Excel en el panel lateral.")
-    st.stop() 
+    st.stop() # Detiene la ejecución para no mostrar errores feos
 
+# Si hay datos (ya sea manuales o automáticos), arranca el motor
 if df_raw is not None:
-    # ELIMINAMOS TODOS LOS ESPACIOS EN BLANCO DE LOS TÍTULOS DE EXCEL
-    df_raw.columns = df_raw.columns.str.strip()
-    
     df_proc = procesar_datos(df_raw, dict(st.session_state))
     
+    # Filtro de Melgar Local con Asistencia
     df_g = df_proc[(df_proc['local'] == 'FBC Melgar') & (df_proc['Asistencia'].notna())].copy()
     df_g['año'] = df_g['año'].astype(str)
-    
-    df_g['Yield_Total'] = (pd.to_numeric(df_g['Ingresos'], errors='coerce') / pd.to_numeric(df_g['Asistencia'], errors='coerce')).round(2)
-    df_g['Yield_Total'] = df_g['Yield_Total'].fillna(0)
+    df_g['Yield_Total'] = (df_g['Ingresos'] / df_g['Asistencia']).round(2)
     
     titanes = ['Universitario', 'Alianza Lima', 'Sporting Cristal', 'Cienciano']
+    
+    # Multiselect para Cross-Highlighting
     equipos_all = sorted(df_g['visitante'].unique())
     seleccionados = st.multiselect("🎯 Selecciona equipo(s) para resaltar sobre el fondo gris:", equipos_all)
 
@@ -210,30 +219,9 @@ if df_raw is not None:
         c1, c2 = st.columns(2)
         paleta = {'2023': '#D32F2F', '2024': '#1976D2', '2025': '#388E3C', '2026': '#FF8F00'}
         
-        # EL GRÁFICO BLINDADO DEFINITIVO
         def plot_master(df_subset, titulo):
-            # Si no hay datos, devolvemos un gráfico vacío sin colapsar
-            if df_subset.empty:
-                return go.Figure().update_layout(title=titulo + " (Sin datos)")
-                
+            # Lógica de Cross-Highlighting
             df_plot = df_subset.copy()
-            
-            # =======================================================
-            # 1. EL ESCUDO ANTI-KEYERROR 
-            # Garantiza que todas las columnas existan antes de leerlas
-            # =======================================================
-            columnas_criticas = {
-                'visitante': 'Desconocido', 'año': 'Otros', 'fecha_real': 'N/A', 
-                'factor_sol': 'N/A', 'hora': 'N/A', 'Asistencia': 0, 
-                'Ingresos': 0, 'Yield_Total': 0, 'ipm_local_5': 0,
-                'pos_local_acumulado_jornada': 'N/A', 'posicion_local': 'N/A'
-            }
-            
-            for col, val_defecto in columnas_criticas.items():
-                if col not in df_plot.columns:
-                    df_plot[col] = val_defecto
-
-            # 2. Lógica de Resaltado (Cross-Highlighting)
             if seleccionados:
                 df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
                 df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['año'], 'Otros')
@@ -244,42 +232,29 @@ if df_raw is not None:
                 df_plot['Texto_Final'] = df_plot['visitante']
                 cmap = paleta
 
-            # 3. Preparación Segura del Hover
-            df_plot['Hover_Visita'] = df_plot['visitante']
-            df_plot['Hover_Fecha'] = df_plot['fecha_real'].astype(str).str[:10]
-            df_plot['Hover_Clima'] = df_plot['factor_sol']
-            df_plot['Hover_Hora'] = df_plot['hora']
-            
-            # Lee la posición de las nuevas variables o de la clásica
-            df_plot['Hover_Pos'] = np.where(df_plot['pos_local_acumulado_jornada'] != 'N/A', 
-                                            df_plot['pos_local_acumulado_jornada'], 
-                                            df_plot['posicion_local'])
+            # Preparar textos formateados para la tarjeta flotante
+            df_plot['Hover_Asistencia'] = df_plot['Asistencia'].apply(lambda x: f"{x:,.0f}")
+            df_plot['Hover_Ingresos'] = df_plot['Ingresos'].apply(lambda x: f"S/ {x:,.2f}")
+            df_plot['Hover_Yield'] = df_plot['Ticket_Promedio'].apply(lambda x: f"S/ {x:,.2f}")
+            # Extraer solo la fecha (Y-M-D)
+            df_plot['Fecha_Corta'] = df_plot['fecha_real'].astype(str).str[:10]
 
-            # Formateo de Moneda y Números
-            df_plot['Hover_Asistencia'] = pd.to_numeric(df_plot['Asistencia'], errors='coerce').fillna(0).apply(lambda x: f"{x:,.0f}")
-            df_plot['Hover_Ingresos'] = pd.to_numeric(df_plot['Ingresos'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
-            df_plot['Hover_Yield'] = pd.to_numeric(df_plot['Yield_Total'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
-
-            # 4. Dibujo del Gráfico
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
                 color_discrete_map=cmap,
                 title=titulo,
-                custom_data=[
-                    'Hover_Visita', 'Hover_Fecha', 'Hover_Pos', 'Hover_Clima', 
-                    'Hover_Hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield'
-                ]
+                custom_data=['visitante', 'Fecha_Corta', 'pos_tabla', 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
             )
             
-            # La plantilla del hover que querías mejorar
+            # Plantilla estricta del recuadro al pasar el mouse
             fig.update_traces(
                 marker=dict(size=14, line=dict(width=1, color='black')),
                 textposition='top right',
                 hovertemplate=(
                     "<b>%{customdata[0]}</b><br>" +
                     "Fecha: %{customdata[1]}<br>" +
-                    "Posición: %{customdata[2]}<br>" +
+                    "Posición Acumulada: %{customdata[2]}<br>" +
                     "Clima: %{customdata[3]} | Hora: %{customdata[4]}<br>" +
                     "Asistencia: %{customdata[5]}<br>" +
                     "Recaudación: %{customdata[6]}<br>" +
@@ -287,21 +262,23 @@ if df_raw is not None:
                 )
             )
             
-            # 5. Regresión OLS y Sombra de Confianza
+            # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
+            # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
             df_trend = df_plot[['ipm_local_5', 'Asistencia']].dropna()
-            # Evitamos calcular la tendencia con ceros inyectados por el escudo
-            df_trend = df_trend[(df_trend['ipm_local_5'] != 0) & (df_trend['Asistencia'] != 0)]
             
-            if len(df_trend) > 2: 
+            if len(df_trend) > 2: # Evita errores si hay muy pocos datos al filtrar
                 x_val = df_trend['ipm_local_5'].values
                 y_val = df_trend['Asistencia'].values
                 
+                # Regresión OLS para precisión estadística
                 X_sm = sm.add_constant(x_val)
                 modelo = sm.OLS(y_val, X_sm).fit()
                 
+                # Array para trazar la línea y la sombra fluidamente
                 x_lin = np.linspace(x_val.min(), x_val.max(), 100)
                 X_pred = sm.add_constant(x_lin)
                 
+                # Extracción del Intervalo de Confianza (95%)
                 predicciones = modelo.get_prediction(X_pred)
                 df_pred = predicciones.summary_frame(alpha=0.05)
                 
@@ -309,16 +286,18 @@ if df_raw is not None:
                 ci_lower = df_pred['mean_ci_lower']
                 ci_upper = df_pred['mean_ci_upper']
                 
+                # 1. Capa de la Sombra (Intervalo de Confianza)
                 fig.add_trace(go.Scatter(
                     x=np.concatenate([x_lin, x_lin[::-1]]),
                     y=np.concatenate([ci_upper, ci_lower[::-1]]),
                     fill='toself',
-                    fillcolor='rgba(200, 200, 200, 0.4)', 
+                    fillcolor='rgba(200, 200, 200, 0.4)', # Gris transparente idéntico a la imagen
                     line=dict(color='rgba(255,255,255,0)'),
                     hoverinfo="skip",
                     showlegend=False
                 ))
                 
+                # 2. Capa de la Línea de Tendencia (Punteada negra)
                 fig.add_trace(go.Scatter(
                     x=x_lin, y=y_lin,
                     mode='lines',
@@ -327,7 +306,17 @@ if df_raw is not None:
                     showlegend=False
                 ))
                 
+                # 3. Ajuste Visual: Movemos la sombra y la línea al fondo
+                # para que los puntos y el cross-highlighting queden por encima
                 fig.data = fig.data[-2:] + fig.data[:-2]
+            # === FIN DE NUEVO CÓDIGO ===
+
+            
+            fig.update_traces(
+                marker=dict(size=14, line=dict(width=1, color='black')),
+                textposition='top right',
+                hovertemplate="<b>%{text}</b><br>IPM: %{x}<br>Asist: %{y}<br>Yield: S/ %{customdata[0]}<br>Sol: %{customdata[1]}<extra></extra>"
+            )
             
             fig.update_layout(
                 legend=dict(orientation="v", yanchor="top", y=0.99, xanchor="left", x=0.01),
@@ -335,85 +324,20 @@ if df_raw is not None:
             )
             return fig
 
-        with c1: st.plotly_chart(plot_master(df_g[~df_g['visitante'].isin(titanes)], "Demanda Orgánica"), use_container_width=True)
-        with c2: st.plotly_chart(plot_master(df_g[df_g['visitante'].isin(titanes)], "Demanda de Titanes"), use_container_width=True)
+        with c1: st.plotly_chart(plot_master(df_g[~df_g['visitante'].isin(titanes)], "Demanda Bajos"), use_container_width=True)
+        with c2: st.plotly_chart(plot_master(df_g[df_g['visitante'].isin(titanes)], "Demanda Altos"), use_container_width=True)
 
+        # Exportación conservando todas las columnas (A-AY+)
         st.markdown("### 💾 Exportar Dataset Maestro")
         fecha = datetime.now().strftime("%Y%m%d_%H%M")
         prefijo = st.text_input("Nombre del archivo (Presiona Enter)", "Dataset_Melgar_RM")
         
+        # Eliminar solo columnas de cálculo interno para no ensuciar
         df_exp = df_proc.drop(columns=['goles_local', 'goles_visitante', 'res_local', 'res_visita', 'irr_local', 'irr_visita', 'nivel_local', 'nivel_visita'], errors='ignore')
         
         buf = io.BytesIO()
         df_exp.to_excel(buf, index=False, engine='openpyxl')
         st.download_button("Descargar Excel Calibrado", data=buf.getvalue(), file_name=f"{prefijo}_{fecha}.xlsx")
-    
-    with tab2: 
-        st.info("Espacio reservado para diagramas de caja (Boxplots) evaluando el impacto del Día y la Hora de programación.")
-        
-    with tab3:
-        st.markdown("### Análisis de Confort Térmico y Migración de Demanda")
-        st.info("⚠️ Los Titanes Históricos (U, Alianza, Cristal, Cienciano) han sido excluidos automáticamente de esta pestaña para medir el comportamiento orgánico puro.")
-        
-        df_clima = df_g[~df_g['visitante'].isin(titanes)].copy()
-        
-        if not df_clima.empty and 'factor_sol' in df_clima.columns:
-            df_clima['factor_sol'] = df_clima['factor_sol'].fillna('Desconocido')
-            df_clima = df_clima[df_clima['factor_sol'] != 'Desconocido']
-            orden_clima = ['Sol Intenso', 'Transición Sombra', 'Noche']
-            
-            c1, c2 = st.columns(2)
-            
-            with c1:
-                fig_total = px.box(
-                    df_clima, x='factor_sol', y='Asistencia', 
-                    color='factor_sol', category_orders={'factor_sol': orden_clima},
-                    title="1. Impacto en Asistencia Total (Tasa de Abandono)",
-                    color_discrete_sequence=['#FFC107', '#FF9800', '#3F51B5']
-                )
-                fig_total.update_layout(
-                    showlegend=False, 
-                    xaxis_title="Condición Térmica", 
-                    yaxis_title="Asistencia Orgánica Total",
-                    plot_bgcolor='white'
-                )
-                fig_total.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-                fig_total.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-                st.plotly_chart(fig_total, use_container_width=True)
-                
-            with c2:
-                tribunas = ['asistentes_sur', 'asistentes_oriente', 'asistentes_occidente']
-                df_promedios = df_clima.groupby('factor_sol')[tribunas].mean().reset_index()
-                
-                df_melt = df_promedios.melt(id_vars='factor_sol', value_vars=tribunas, var_name='Tribuna', value_name='Promedio_Asistentes')
-                df_melt['Tribuna'] = df_melt['Tribuna'].str.replace('asistentes_', '').str.capitalize()
-                
-                fig_share = px.bar(
-                    df_melt, x='factor_sol', y='Promedio_Asistentes', color='Tribuna',
-                    category_orders={'factor_sol': orden_clima},
-                    title="2. Distribución y Migración Interna (Share %)",
-                    barmode='100%', 
-                    text_auto='.1f',
-                    color_discrete_map={'Sur': '#F44336', 'Oriente': '#4CAF50', 'Occidente': '#2196F3'}
-                )
-                fig_share.update_layout(
-                    xaxis_title="Condición Térmica", 
-                    yaxis_title="Participación de Mercado (%)",
-                    plot_bgcolor='white'
-                )
-                fig_share.update_traces(texttemplate='%{value:.1f}%', textposition='inside')
-                st.plotly_chart(fig_share, use_container_width=True)
-                
-            st.markdown("""
-            ### 💡 Lectura de RM (Revenue Management)
-            * **Gráfico de Cajas (Izquierda):** Evalúa la dispersión y la caída de la mediana. Si la caja de "Sol Intenso" está significativamente por debajo de "Noche", estás evidenciando la destrucción de la demanda.
-            * **Gráfico de Barras (Derecha):** Evalúa el *Upselling Involuntario*. Si el porcentaje de "Oriente" (verde) se encoge durante el "Sol Intenso" y el de "Occidente" (azul) se expande, compruebas que el hincha paga más por la sombra.
-            """)
-        else:
-            st.warning("No hay suficientes datos o falta la columna 'factor_sol' para procesar este análisis.")
-
-    with tab4: 
-        st.info("Espacio reservado para medir el impacto de la Temporada de Lluvias y la fuga de demanda en Feriados Largos.")
 
 else:
-    st.warning("👈 Por favor, carga tu archivo Excel en el panel lateral para iniciar el simulador.")
+    st.warning("Carga el archivo Excel en el panel lateral.")
