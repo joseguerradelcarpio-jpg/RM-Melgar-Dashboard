@@ -223,9 +223,6 @@ if df_raw is not None:
             # Lógica de Cross-Highlighting
             df_plot = df_subset.copy()
             
-            # TU SOLUCIÓN: Multiplicar las variables limpias que sí funcionan
-            df_plot['Ingresos_Seguros'] = df_plot['Yield_Total'] * df_plot['Asistencia']
-            
             if seleccionados:
                 df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
                 df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['año'], 'Otros')
@@ -236,21 +233,18 @@ if df_raw is not None:
                 df_plot['Texto_Final'] = df_plot['visitante']
                 cmap = paleta
 
+            # --- LA ESTRATEGIA INFALIBLE ---
+            # Formateamos los números a texto directamente en Pandas antes del gráfico
+            df_plot['Texto_Yield'] = df_plot['Yield_Total'].apply(lambda x: f"{x:,.2f}")
+            df_plot['Texto_Ingresos'] = df_plot['Ingresos'].apply(lambda x: f"{x:,.2f}")
+
+            # Usamos custom_data (una lista exacta) en lugar del hover_data confuso
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
                 color_discrete_map=cmap,
                 title=titulo,
-                hover_data={
-                    'ipm_local_5': ':.2f', 
-                    'Asistencia': ':,.0f', 
-                    'Yield_Total': ':.2f', 
-                    'factor_sol': True, 
-                    'Ingresos_Seguros': ':,.2f', # <-- Tu variable matemática
-                    'año': False,
-                    'Color_Final': False, 
-                    'Texto_Final': False
-                }
+                custom_data=['Texto_Yield', 'factor_sol', 'Texto_Ingresos'] # Índice 0, 1 y 2 estrictos
             )
             
             # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
@@ -273,7 +267,7 @@ if df_raw is not None:
                 ci_lower = df_pred['mean_ci_lower']
                 ci_upper = df_pred['mean_ci_upper']
                 
-                # 1. Capa de la Sombra (Intervalo de Confianza)
+                # Capa de la Sombra
                 fig.add_trace(go.Scatter(
                     x=np.concatenate([x_lin, x_lin[::-1]]),
                     y=np.concatenate([ci_upper, ci_lower[::-1]]),
@@ -284,7 +278,7 @@ if df_raw is not None:
                     showlegend=False
                 ))
                 
-                # 2. Capa de la Línea de Tendencia (Punteada negra)
+                # Capa de la Línea
                 fig.add_trace(go.Scatter(
                     x=x_lin, y=y_lin,
                     mode='lines',
@@ -293,14 +287,15 @@ if df_raw is not None:
                     showlegend=False
                 ))
                 
-                # 3. Ajuste Visual: Movemos la sombra y la línea al fondo
+                # Movemos la sombra al fondo
                 fig.data = fig.data[-2:] + fig.data[:-2]
             # === FIN DE NUEVO CÓDIGO ===
             
+            # Plantilla estricta llamando a los índices 0, 1 y 2
             fig.update_traces(
                 marker=dict(size=14, line=dict(width=1, color='black')),
                 textposition='top right',
-                hovertemplate="<b>%{text}</b><br>IPM: %{x}<br>Asist: %{y}<br>Yield: S/ %{customdata[0]}<br>Sol: %{customdata[1]}<br>Ingresos: S/ %{customdata[2]}<extra></extra>"
+                hovertemplate="<b>%{text}</b><br>IPM: %{x:.2f}<br>Asist: %{y:,.0f}<br>Yield: S/ %{customdata[0]}<br>Sol: %{customdata[1]}<br>Ingresos: S/ %{customdata[2]}<extra></extra>"
             )
             
             fig.update_layout(
