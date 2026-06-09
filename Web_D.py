@@ -228,13 +228,22 @@ if df_raw is not None:
             df_plot['Hover_Yield'] = pd.to_numeric(df_plot['Yield_Total'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
             df_plot['Fecha_Corta'] = df_plot['fecha_real'].astype(str).str[:10]
 
-            # CORRECCIÓN DE COLUMNA: Usamos la nueva variable limpia "pos_local_acumulado_jornada"
+            # === BLINDAJE DINÁMICO PARA LA COLUMNA DE POSICIÓN ===
+            # Si el Excel tiene las 8 variables, usa la nueva. Si es el viejo, usa la clásica.
+            if 'pos_local_acumulado_jornada' in df_plot.columns:
+                col_pos = 'pos_local_acumulado_jornada'
+            elif 'posicion_local' in df_plot.columns:
+                col_pos = 'posicion_local'
+            else:
+                df_plot['posicion_fantasma'] = "N/A"
+                col_pos = 'posicion_fantasma'
+
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
                 color_discrete_map=cmap,
                 title=titulo,
-                custom_data=['visitante', 'Fecha_Corta', 'pos_local_acumulado_jornada', 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
+                custom_data=['visitante', 'Fecha_Corta', col_pos, 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
             )
             
             fig.update_traces(
