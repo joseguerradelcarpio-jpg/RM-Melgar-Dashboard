@@ -5,8 +5,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import io
-import statsmodels.api as sm # <-- NUEVA LÍNEA
-import os # Añade esto junto a tus otros imports al inicio (pandas, numpy, etc.)
+import statsmodels.api as sm
+import os
+
 # =========================================================
 # 1. CONFIGURACIÓN DE LA PÁGINA Y ESTADO DE SESIÓN
 # =========================================================
@@ -80,7 +81,6 @@ with st.sidebar.expander("4. Modificadores Especiales"):
 def procesar_datos(df_raw, params):
     df = df_raw.copy()
     
-    # 1. Limpieza RIGUROSA de todas las variables que se van a recalcular
     cols_a_borrar = [
         'local_H1', 'local_H2', 'local_H3', 'local_H4', 'local_H5',
         'visita_H1', 'visita_H2', 'visita_H3', 'visita_H4', 'visita_H5',
@@ -98,7 +98,6 @@ def procesar_datos(df_raw, params):
     df['res_local'] = np.where(df['goles_local'] > df['goles_visitante'], 'G', np.where(df['goles_local'] == df['goles_visitante'], 'E', 'P'))
     df['res_visita'] = np.where(df['goles_visitante'] > df['goles_local'], 'G', np.where(df['goles_visitante'] == df['goles_local'], 'E', 'P'))
 
-    # Tabla en la Sombra
     puntos = {}
     nivel_l, nivel_v = [], []
     titanes = ['Universitario', 'Alianza Lima', 'Sporting Cristal', 'Cienciano']
@@ -148,7 +147,6 @@ def procesar_datos(df_raw, params):
     df['irr_local'] = df.apply(lambda r: calc_irr(r['res_local'], 'Local', r['nivel_visita'], r['goles_local'], r['goles_visitante']), axis=1)
     df['irr_visita'] = df.apply(lambda r: calc_irr(r['res_visita'], 'Visita', r['nivel_local'], r['goles_local'], r['goles_visitante']), axis=1)
 
-    # Historial y Ponderación
     df_h = pd.concat([
         df[['fecha_real', 'local', 'irr_local']].rename(columns={'local':'eq', 'irr_local':'irr'}),
         df[['fecha_real', 'visitante', 'irr_visita']].rename(columns={'visitante':'eq', 'irr_visita':'irr'})
@@ -157,15 +155,12 @@ def procesar_datos(df_raw, params):
     for i in range(1, 6): df_h[f'H{i}'] = df_h.groupby('eq')['irr'].shift(i)
     df_h.fillna(0, inplace=True)
     
-    # Unir variables H para Local
     df = pd.merge(df, df_h[['fecha_real', 'eq', 'H1', 'H2', 'H3', 'H4', 'H5']], left_on=['fecha_real', 'local'], right_on=['fecha_real', 'eq'], how='left').drop('eq', axis=1)
     df.rename(columns={f'H{i}': f'local_H{i}' for i in range(1, 6)}, inplace=True)
 
-    # Unir variables H para Visita
     df = pd.merge(df, df_h[['fecha_real', 'eq', 'H1', 'H2', 'H3', 'H4', 'H5']], left_on=['fecha_real', 'visitante'], right_on=['fecha_real', 'eq'], how='left').drop('eq', axis=1)
     df.rename(columns={f'H{i}': f'visita_H{i}' for i in range(1, 6)}, inplace=True)
 
-    # Cálculo Final del IPM
     df['ipm_local_5'] = (df['local_H1']*params['h1']) + (df['local_H2']*params['h2']) + (df['local_H3']*params['h3']) + (df['local_H4']*params['h4']) + (df['local_H5']*params['h5'])
     df['ipm_visita_5'] = (df['visita_H1']*params['h1']) + (df['visita_H2']*params['h2']) + (df['visita_H3']*params['h3']) + (df['visita_H4']*params['h4']) + (df['visita_H5']*params['h5'])
     
@@ -182,34 +177,29 @@ st.title("📈 Dashboard Interactivo de Demanda")
 
 archivo_por_defecto = 'Dataset_Tesis_8_Variables2.xlsx'
 
-# Lógica de Carga Dual (Manual o Automática)
 df_raw = None
 
 if archivo_cargado is not None:
-    # 1. Prioridad al archivo que suba el usuario manualmente
     df_raw = pd.read_excel(archivo_cargado)
     st.sidebar.success("✅ Archivo personalizado cargado.")
 elif os.path.exists(archivo_por_defecto):
-    # 2. Si no suben nada, lee el archivo precargado en el servidor
     df_raw = pd.read_excel(archivo_por_defecto)
     st.sidebar.info("ℹ️ Usando base de datos oficial por defecto.")
 else:
-    # 3. Mensaje de error si falta el archivo
     st.warning("⚠️ No se encontró la base de datos. Por favor, carga el archivo Excel en el panel lateral.")
-    st.stop() # Detiene la ejecución para no mostrar errores feos
+    st.stop() 
 
-# Si hay datos (ya sea manuales o automáticos), arranca el motor
 if df_raw is not None:
     df_proc = procesar_datos(df_raw, dict(st.session_state))
     
-    # Filtro de Melgar Local con Asistencia
     df_g = df_proc[(df_proc['local'] == 'FBC Melgar') & (df_proc['Asistencia'].notna())].copy()
     df_g['año'] = df_g['año'].astype(str)
-    df_g['Yield_Total'] = (df_g['Ingresos'] / df_g['Asistencia']).round(2)
+    
+    # Blindaje matemático absoluto para la división de ingresos y asistencia
+    df_g['Yield_Total'] = (pd.to_numeric(df_g['Ingresos'], errors='coerce') / pd.to_numeric(df_g['Asistencia'], errors='coerce')).round(2)
+    df_g['Yield_Total'] = df_g['Yield_Total'].fillna(0)
     
     titanes = ['Universitario', 'Alianza Lima', 'Sporting Cristal', 'Cienciano']
-    
-    # Multiselect para Cross-Highlighting
     equipos_all = sorted(df_g['visitante'].unique())
     seleccionados = st.multiselect("🎯 Selecciona equipo(s) para resaltar sobre el fondo gris:", equipos_all)
 
@@ -220,7 +210,6 @@ if df_raw is not None:
         paleta = {'2023': '#D32F2F', '2024': '#1976D2', '2025': '#388E3C', '2026': '#FF8F00'}
         
         def plot_master(df_subset, titulo):
-            # Lógica de Cross-Highlighting
             df_plot = df_subset.copy()
             if seleccionados:
                 df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
@@ -232,15 +221,11 @@ if df_raw is not None:
                 df_plot['Texto_Final'] = df_plot['visitante']
                 cmap = paleta
 
-            # Preparar textos formateados (BLINDADO MATEMÁTICAMENTE CONTRA NULOS)
             df_plot['Hover_Asistencia'] = pd.to_numeric(df_plot['Asistencia'], errors='coerce').fillna(0).apply(lambda x: f"{x:,.0f}")
             df_plot['Hover_Ingresos'] = pd.to_numeric(df_plot['Ingresos'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
             df_plot['Hover_Yield'] = pd.to_numeric(df_plot['Yield_Total'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
-            
-            # Extraer solo la fecha (Y-M-D)
             df_plot['Fecha_Corta'] = df_plot['fecha_real'].astype(str).str[:10]
 
-            # CORRECCIÓN DE BUG: Se cambió 'pos_tabla' por 'posicion_local' (que sí existe en tu Excel)
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
@@ -249,7 +234,6 @@ if df_raw is not None:
                 custom_data=['visitante', 'Fecha_Corta', 'posicion_local', 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
             )
             
-            # Plantilla estricta del recuadro al pasar el mouse
             fig.update_traces(
                 marker=dict(size=14, line=dict(width=1, color='black')),
                 textposition='top right',
@@ -264,22 +248,18 @@ if df_raw is not None:
                 )
             )
             
-            # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
             df_trend = df_plot[['ipm_local_5', 'Asistencia']].dropna()
             
-            if len(df_trend) > 2: # Evita errores si hay muy pocos datos al filtrar
+            if len(df_trend) > 2: 
                 x_val = df_trend['ipm_local_5'].values
                 y_val = df_trend['Asistencia'].values
                 
-                # Regresión OLS para precisión estadística
                 X_sm = sm.add_constant(x_val)
                 modelo = sm.OLS(y_val, X_sm).fit()
                 
-                # Array para trazar la línea y la sombra fluidamente
                 x_lin = np.linspace(x_val.min(), x_val.max(), 100)
                 X_pred = sm.add_constant(x_lin)
                 
-                # Extracción del Intervalo de Confianza (95%)
                 predicciones = modelo.get_prediction(X_pred)
                 df_pred = predicciones.summary_frame(alpha=0.05)
                 
@@ -287,18 +267,16 @@ if df_raw is not None:
                 ci_lower = df_pred['mean_ci_lower']
                 ci_upper = df_pred['mean_ci_upper']
                 
-                # 1. Capa de la Sombra (Intervalo de Confianza)
                 fig.add_trace(go.Scatter(
                     x=np.concatenate([x_lin, x_lin[::-1]]),
                     y=np.concatenate([ci_upper, ci_lower[::-1]]),
                     fill='toself',
-                    fillcolor='rgba(200, 200, 200, 0.4)', # Gris transparente idéntico a la imagen
+                    fillcolor='rgba(200, 200, 200, 0.4)', 
                     line=dict(color='rgba(255,255,255,0)'),
                     hoverinfo="skip",
                     showlegend=False
                 ))
                 
-                # 2. Capa de la Línea de Tendencia (Punteada negra)
                 fig.add_trace(go.Scatter(
                     x=x_lin, y=y_lin,
                     mode='lines',
@@ -307,9 +285,7 @@ if df_raw is not None:
                     showlegend=False
                 ))
                 
-                # 3. Ajuste Visual: Movemos la sombra y la línea al fondo
                 fig.data = fig.data[-2:] + fig.data[:-2]
-            # === FIN DE NUEVO CÓDIGO ===
             
             fig.update_layout(
                 legend=dict(orientation="v", yanchor="top", y=0.99, xanchor="left", x=0.01),
@@ -317,15 +293,13 @@ if df_raw is not None:
             )
             return fig
 
-        with c1: st.plotly_chart(plot_master(df_g[~df_g['visitante'].isin(titanes)], "Demanda Bajos"), use_container_width=True)
-        with c2: st.plotly_chart(plot_master(df_g[df_g['visitante'].isin(titanes)], "Demanda Altos"), use_container_width=True)
+        with c1: st.plotly_chart(plot_master(df_g[~df_g['visitante'].isin(titanes)], "Demanda Orgánica"), use_container_width=True)
+        with c2: st.plotly_chart(plot_master(df_g[df_g['visitante'].isin(titanes)], "Demanda de Titanes"), use_container_width=True)
 
-        # Exportación conservando todas las columnas (A-AY+)
         st.markdown("### 💾 Exportar Dataset Maestro")
         fecha = datetime.now().strftime("%Y%m%d_%H%M")
         prefijo = st.text_input("Nombre del archivo (Presiona Enter)", "Dataset_Melgar_RM")
         
-        # Eliminar solo columnas de cálculo interno para no ensuciar
         df_exp = df_proc.drop(columns=['goles_local', 'goles_visitante', 'res_local', 'res_visita', 'irr_local', 'irr_visita', 'nivel_local', 'nivel_visita'], errors='ignore')
         
         buf = io.BytesIO()
@@ -339,18 +313,15 @@ if df_raw is not None:
         st.markdown("### Análisis de Confort Térmico y Migración de Demanda")
         st.info("⚠️ Los Titanes Históricos (U, Alianza, Cristal, Cienciano) han sido excluidos automáticamente de esta pestaña para medir el comportamiento orgánico puro.")
         
-        # Filtro de cuarentena: Solo demanda orgánica
         df_clima = df_g[~df_g['visitante'].isin(titanes)].copy()
         
         if not df_clima.empty and 'factor_sol' in df_clima.columns:
-            # 1. Limpieza de datos y ordenamiento lógico
             df_clima['factor_sol'] = df_clima['factor_sol'].fillna('Desconocido')
             df_clima = df_clima[df_clima['factor_sol'] != 'Desconocido']
             orden_clima = ['Sol Intenso', 'Transición Sombra', 'Noche']
             
             c1, c2 = st.columns(2)
             
-            # Gráfico 1: Impacto en el Volumen Total (Tasa de Abandono)
             with c1:
                 fig_total = px.box(
                     df_clima, x='factor_sol', y='Asistencia', 
@@ -368,23 +339,18 @@ if df_raw is not None:
                 fig_total.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
                 st.plotly_chart(fig_total, use_container_width=True)
                 
-            # Gráfico 2: Migración de Tribunas (Análisis de Share Porcentual)
             with c2:
-                # Agrupamos promedios absolutos para ver la proporción
                 tribunas = ['asistentes_sur', 'asistentes_oriente', 'asistentes_occidente']
                 df_promedios = df_clima.groupby('factor_sol')[tribunas].mean().reset_index()
                 
-                # Transformar datos para Plotly (Melt)
                 df_melt = df_promedios.melt(id_vars='factor_sol', value_vars=tribunas, var_name='Tribuna', value_name='Promedio_Asistentes')
-                
-                # Limpiar los nombres de las tribunas para que se vean bien en la leyenda
                 df_melt['Tribuna'] = df_melt['Tribuna'].str.replace('asistentes_', '').str.capitalize()
                 
                 fig_share = px.bar(
                     df_melt, x='factor_sol', y='Promedio_Asistentes', color='Tribuna',
                     category_orders={'factor_sol': orden_clima},
                     title="2. Distribución y Migración Interna (Share %)",
-                    barmode='100%', # Convierte barras absolutas en porcentajes
+                    barmode='100%', 
                     text_auto='.1f',
                     color_discrete_map={'Sur': '#F44336', 'Oriente': '#4CAF50', 'Occidente': '#2196F3'}
                 )
