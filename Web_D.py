@@ -213,7 +213,7 @@ if df_raw is not None:
     equipos_all = sorted(df_g['visitante'].unique())
     seleccionados = st.multiselect("🎯 Selecciona equipo(s) para resaltar sobre el fondo gris:", equipos_all)
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📉 Momentum", "📅 Calendario", "☀️ Confort Térmico", "🌧️ Shocks"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📉 Momentum", "📅 Calendario", "☀️ Confort Térmico", "🌧️ Shocks", "💰 Elasticidad y Yield"])
 
     with tab1:
         c1, c2 = st.columns(2)
@@ -445,15 +445,24 @@ if df_raw is not None:
         else:
             st.warning("No hay datos suficientes para los filtros seleccionados.")
 
-    with tab4: 
-       with tab4:
+    with tab4:
         st.markdown("### Análisis de Shocks Ambientales: Lluvia")
         
-        # Filtro de cuarentena: Solo demanda orgánica para ver la sensibilidad real al clima
-        df_lluvia = df_g[~df_g['visitante'].isin(titanes)].copy()
+        # FILTRO DINÁMICO POR EQUIPOS (Agregado para mantener consistencia)
+        alta_demanda = ['Universitario', 'Alianza Lima', 'Sporting Cristal', 'Cienciano']
+        equipos_disp_t4 = sorted(df_g['visitante'].unique())
+        equipos_def_t4 = [e for e in equipos_disp_t4 if e not in alta_demanda]
+        
+        equipos_lluvia = st.multiselect(
+            "Filtro de Rivales: Selecciona qué equipos analizar contra el clima", 
+            options=equipos_disp_t4, 
+            default=equipos_def_t4,
+            key="multiselect_tab4"
+        )
+        
+        df_lluvia = df_g[df_g['visitante'].isin(equipos_lluvia)].copy()
         
         if not df_lluvia.empty and 'temporada_lluvia' in df_lluvia.columns:
-            # Asegurar formato binario/texto para la gráfica
             df_lluvia['Condicion_Lluvia'] = np.where(df_lluvia['temporada_lluvia'] == 1, 'Temporada de Lluvias', 'Clima Seco')
             
             c1, c2 = st.columns([2, 1])
@@ -462,9 +471,9 @@ if df_raw is not None:
                 fig_lluvia = px.box(
                     df_lluvia, x='Condicion_Lluvia', y='Asistencia', 
                     color='Condicion_Lluvia',
-                    title="Impacto de la Lluvia en la Asistencia Orgánica",
+                    title="Impacto de la Lluvia en la Asistencia",
                     points='all',
-                    color_discrete_sequence=['#607D8B', '#03A9F4']
+                    color_discrete_sequence=['#9E9E9E', '#03A9F4'] # Gris para lluvia, Azul para seco
                 )
                 fig_lluvia.update_layout(showlegend=False, plot_bgcolor='white', xaxis_title=None, yaxis_title="Asistencia")
                 fig_lluvia.update_xaxes(showgrid=True, gridcolor='lightgray')
@@ -474,13 +483,75 @@ if df_raw is not None:
             with c2:
                 st.markdown("<br><br>", unsafe_allow_html=True)
                 st.markdown("""
-                ### 💡 Diagnóstico
-                La lluvia representa una barrera física para el consumidor de eventos al aire libre. 
+                ### 💡 Diagnóstico y Variables Ocultas
+                La lluvia representa una barrera física. Sin embargo, en Arequipa, la temporada de lluvias (Ene-Mar) coincide con el inicio del torneo (Efecto Novedad) y las vacaciones de verano. 
                 
-                Este gráfico cuantifica la "fuga por clima". Si la mediana de 'Temporada de Lluvias' es inferior, el modelo confirma que el hincha orgánico penaliza la incomodidad de la lluvia, obligando a considerar estrategias de retención (ej. impermeables de cortesía, combos de bebidas calientes o descuentos preventivos).
+                Si la mediana de 'Temporada de Lluvias' es superior o igual, demuestra que el entusiasmo inicial de la temporada compensa y anula el malestar del clima.
                 """)
         else:
-            st.warning("No se encontró la columna 'temporada_lluvia' o no hay datos suficientes.")
+            st.warning("Por favor, selecciona al menos un equipo en el filtro superior.")
+
+    with tab5:
+        st.markdown("### Elasticidad Precio de la Demanda (Curvas de Yield)")
+        st.info("Este módulo calcula automáticamente el Ticket Promedio Real (Ingreso / Asistentes) por tribuna y traza la curva de sensibilidad al precio mediante regresión lineal.")
+        
+        # Filtro de equipos para aislar el comportamiento
+        equipos_yield = st.multiselect(
+            "Filtro de Rivales: Excluye a los Titanes para ver la sensibilidad de la demanda orgánica", 
+            options=equipos_disp_t4, 
+            default=equipos_def_t4,
+            key="multiselect_tab5"
+        )
+        
+        df_y = df_g[df_g['visitante'].isin(equipos_yield)].copy()
+        
+        # Verificar que existan las columnas financieras
+        cols_fin = ['ingresos_sur', 'asistentes_sur', 'ingresos_oriente', 'asistentes_oriente', 'ingresos_occidente', 'asistentes_occidente']
+        if all(col in df_y.columns for col in cols_fin):
+            
+            # 1. Cálculo matemático del Yield (Ticket Promedio Real)
+            # Usamos np.where para evitar errores de división por cero
+            df_y['Yield_Sur'] = np.where(df_y['asistentes_sur'] > 0, df_y['ingresos_sur'] / df_y['asistentes_sur'], np.nan)
+            df_y['Yield_Oriente'] = np.where(df_y['asistentes_oriente'] > 0, df_y['ingresos_oriente'] / df_y['asistentes_oriente'], np.nan)
+            df_y['Yield_Occidente'] = np.where(df_y['asistentes_occidente'] > 0, df_y['ingresos_occidente'] / df_y['asistentes_occidente'], np.nan)
+            
+            # 2. Reestructurar datos para graficar las 3 curvas juntas (Melt)
+            dfs_tribunas = []
+            for tribuna in ['Sur', 'Oriente', 'Occidente']:
+                df_temp = df_y[['visitante', f'Yield_{tribuna}', f'asistentes_{tribuna.lower()}']].copy()
+                df_temp.columns = ['Rival', 'Ticket_Promedio', 'Asistencia']
+                df_temp['Tribuna'] = tribuna
+                dfs_tribunas.append(df_temp)
+                
+            df_elasticidad = pd.concat(dfs_tribunas).dropna()
+            
+            # 3. Graficar con línea de tendencia OLS (Mínimos Cuadrados Ordinarios)
+            fig_yield = px.scatter(
+                df_elasticidad, x='Ticket_Promedio', y='Asistencia', color='Tribuna',
+                trendline="ols", # Esto traza la línea de elasticidad automáticamente
+                title="Curvas de Demanda por Tribuna (Asistencia vs Ticket Promedio)",
+                color_discrete_map={'Sur': '#F44336', 'Oriente': '#4CAF50', 'Occidente': '#2196F3'},
+                hover_data=['Rival']
+            )
+            
+            fig_yield.update_layout(
+                xaxis_title="Ticket Promedio Real (S/)", 
+                yaxis_title="Volumen de Asistencia",
+                plot_bgcolor='white',
+                height=600
+            )
+            fig_yield.update_xaxes(showgrid=True, gridcolor='lightgray', tickprefix="S/ ")
+            fig_yield.update_yaxes(showgrid=True, gridcolor='lightgray')
+            
+            st.plotly_chart(fig_yield, use_container_width=True)
+            
+            st.markdown("""
+            ### 💡 Lectura de Elasticidad (Revenue Management)
+            * **Pendiente Negativa Fuerte (Línea muy inclinada hacia abajo):** Indica alta sensibilidad. Si subes el precio S/ 1, la asistencia cae drásticamente. (Suele ocurrir en Sur).
+            * **Pendiente Plana (Línea casi horizontal):** Indica demanda inelástica. Puedes subir el precio y el volumen de gente se mantendrá casi intacto, lo que maximiza fuertemente la recaudación. (Suele ocurrir en Occidente).
+            """)
+        else:
+            st.error("No se detectaron las columnas de ingresos y asistentes por tribuna en la base de datos.")
 
 else:
     st.warning("👈 Por favor, carga tu archivo Excel en el panel lateral para iniciar el simulador.")
