@@ -305,70 +305,60 @@ if df_raw is not None:
         st.info("Espacio reservado para diagramas de caja (Boxplots) evaluando el impacto del Día y la Hora de programación.")
         
     with tab3:
-        st.markdown("### Análisis de Confort Térmico y Migración de Demanda")
-        st.info("⚠️ Los Titanes Históricos (U, Alianza, Cristal, Cienciano) han sido excluidos automáticamente de esta pestaña para medir el comportamiento orgánico puro.")
+        st.markdown("### Análisis de Confort Térmico y Migración")
         
-        # Filtro de cuarentena: Solo demanda orgánica
-        df_clima = df_g[~df_g['visitante'].isin(titanes)].copy()
+        # FILTRO DINÁMICO
+        incluir_titanes = st.checkbox("Incluir 'Titanes' (U, Alianza, Cristal, Cienciano) en este análisis", value=False)
+        
+        # Filtro lógico
+        if not incluir_titanes:
+            df_clima = df_g[~df_g['visitante'].isin(titanes)].copy()
+        else:
+            df_clima = df_g.copy()
         
         if not df_clima.empty and 'factor_sol' in df_clima.columns:
-            # 1. Limpieza de datos y ordenamiento lógico
             df_clima['factor_sol'] = df_clima['factor_sol'].fillna('Desconocido')
             df_clima = df_clima[df_clima['factor_sol'] != 'Desconocido']
             orden_clima = ['Sol Intenso', 'Transición Sombra', 'Noche']
             
             c1, c2 = st.columns(2)
             
-            # Gráfico 1: Impacto en el Volumen Total (Tasa de Abandono)
             with c1:
                 fig_total = px.box(
                     df_clima, x='factor_sol', y='Asistencia', 
                     color='factor_sol', category_orders={'factor_sol': orden_clima},
-                    title="1. Impacto en Asistencia Total (Tasa de Abandono)",
+                    title="1. Impacto en Asistencia Total",
                     color_discrete_sequence=['#FFC107', '#FF9800', '#3F51B5']
                 )
-                fig_total.update_layout(
-                    showlegend=False, 
-                    xaxis_title="Condición Térmica", 
-                    yaxis_title="Asistencia Orgánica Total",
-                    plot_bgcolor='white'
-                )
-                fig_total.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-                fig_total.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+                fig_total.update_layout(showlegend=False, plot_bgcolor='white', xaxis_title=None, yaxis_title="Asistencia")
                 st.plotly_chart(fig_total, use_container_width=True)
                 
-            # Gráfico 2: Migración de Tribunas (Análisis de Share Porcentual)
             with c2:
-                # 1. Agrupamos por factor_sol y sumamos las asistencias
+                # Normalización manual para porcentajes
                 tribunas = ['asistentes_sur', 'asistentes_oriente', 'asistentes_occidente']
-                df_promedios = df_clima.groupby('factor_sol')[tribunas].mean()
-                
-                # 2. NORMALIZACIÓN MANUAL: Convertimos a porcentajes (0-100) antes de graficar
-                df_norm = df_promedios.div(df_promedios.sum(axis=1), axis=0) * 100
+                df_prom = df_clima.groupby('factor_sol')[tribunas].mean()
+                df_norm = df_prom.div(df_prom.sum(axis=1), axis=0) * 100
                 df_norm = df_norm.reset_index()
                 
-                # 3. Transformar para Plotly (Melt)
                 df_melt = df_norm.melt(id_vars='factor_sol', value_vars=tribunas, var_name='Tribuna', value_name='Porcentaje')
                 df_melt['Tribuna'] = df_melt['Tribuna'].str.replace('asistentes_', '').str.capitalize()
                 
-                # 4. Graficar (usando barmode='stack', que es el estándar)
+                # Crear columna de texto formateado para que aparezca dentro de la barra
+                df_melt['Texto_Etiqueta'] = df_melt['Porcentaje'].apply(lambda x: f"{x:.1f}%")
+                
                 fig_share = px.bar(
                     df_melt, x='factor_sol', y='Porcentaje', color='Tribuna',
                     category_orders={'factor_sol': orden_clima},
-                    title="2. Distribución y Migración Interna (Share %)",
+                    title="2. Distribución y Migración (%)",
                     barmode='stack',
-                    text_auto='.1f',
+                    text='Texto_Etiqueta', # Usamos nuestra columna personalizada
                     color_discrete_map={'Sur': '#F44336', 'Oriente': '#4CAF50', 'Occidente': '#2196F3'}
                 )
-                
-                fig_share.update_layout(
-                    xaxis_title="Condición Térmica", 
-                    yaxis_title="Participación de Mercado (%)",
-                    plot_bgcolor='white',
-                    yaxis=dict(range=[0, 100])
-                )
-                fig_share.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
+                fig_share.update_layout(plot_bgcolor='white', yaxis=dict(range=[0, 100]), xaxis_title=None)
+                fig_share.update_traces(textposition='inside', textfont_size=12)
                 st.plotly_chart(fig_share, use_container_width=True)
+        else:
+            st.warning("No hay datos suficientes para los filtros seleccionados.")
                 
             st.markdown("""
             ### 💡 Lectura de RM (Revenue Management)
