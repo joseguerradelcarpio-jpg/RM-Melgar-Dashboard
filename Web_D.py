@@ -351,28 +351,20 @@ if df_raw is not None:
                     category_orders={'factor_sol': orden_clima},
                     title="2. Distribución y Migración (%)",
                     barmode='stack',
-                    text='Texto_Etiqueta', # Usamos nuestra columna personalizada
+                    text='Texto_Etiqueta',
                     color_discrete_map={'Sur': '#F44336', 'Oriente': '#4CAF50', 'Occidente': '#2196F3'}
                 )
                 fig_share.update_layout(plot_bgcolor='white', yaxis=dict(range=[0, 100]), xaxis_title=None)
                 fig_share.update_traces(textposition='inside', textfont_size=12)
                 st.plotly_chart(fig_share, use_container_width=True)
-        else:
-            st.warning("No hay datos suficientes para los filtros seleccionados.")
-
-    with tab4: 
-        st.info("Espacio reservado para medir el impacto de la Temporada de Lluvias y la fuga de demanda en Feriados Largos.")
-
-else:
-    st.warning("👈 Por favor, carga tu archivo Excel en el panel lateral para iniciar el simulador.")
                 
             st.markdown("""
-            ### 💡 Lectura de RM (Revenue Management)
+            ### 💡 Lectura de Revenue Management
             * **Gráfico de Cajas (Izquierda):** Evalúa la dispersión y la caída de la mediana. Si la caja de "Sol Intenso" está significativamente por debajo de "Noche", estás evidenciando la destrucción de la demanda.
             * **Gráfico de Barras (Derecha):** Evalúa el *Upselling Involuntario*. Si el porcentaje de "Oriente" (verde) se encoge durante el "Sol Intenso" y el de "Occidente" (azul) se expande, compruebas que el hincha paga más por la sombra.
             """)
         else:
-            st.warning("No hay suficientes datos o falta la columna 'factor_sol' para procesar este análisis.")
+            st.warning("No hay datos suficientes para los filtros seleccionados.")
 
     with tab4: 
         st.info("Espacio reservado para medir el impacto de la Temporada de Lluvias y la fuga de demanda en Feriados Largos.")
