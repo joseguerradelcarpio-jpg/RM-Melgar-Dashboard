@@ -338,6 +338,7 @@ if df_raw is not None:
                 fig_dias.update_xaxes(showgrid=True, gridcolor='lightgray')
                 fig_dias.update_yaxes(showgrid=True, gridcolor='lightgray')
                 st.plotly_chart(fig_dias, use_container_width=True)
+                st.markdown("**Resumen:** Los miércoles y jueves representan el valle crítico de asistencia orgánica, mientras que el domingo consolida el pico natural de demanda con la mayor mediana.")
                 
             with c2:
                 fig_macro = px.box(
@@ -351,6 +352,7 @@ if df_raw is not None:
                 fig_macro.update_xaxes(showgrid=True, gridcolor='lightgray')
                 fig_macro.update_yaxes(showgrid=True, gridcolor='lightgray')
                 st.plotly_chart(fig_macro, use_container_width=True)
+                st.markdown("**Resumen:** Jugar en fin de semana eleva drásticamente la base de asistencia garantizada, evidenciando un alto costo de oportunidad al programar partidos en días laborables.")
             
             st.markdown("---")
             
@@ -371,13 +373,10 @@ if df_raw is not None:
                     fig_feriado.update_xaxes(showgrid=True, gridcolor='lightgray')
                     fig_feriado.update_yaxes(showgrid=True, gridcolor='lightgray')
                     
-                    # Usamos columnas para centrar un poco el gráfico inferior
                     _, col_centro, _ = st.columns([1, 2, 1])
                     with col_centro:
                         st.plotly_chart(fig_feriado, use_container_width=True)
-                        st.markdown("""
-                        **Nota:** Este gráfico aísla exclusivamente los sábados y domingos. Mide si la coincidencia con un feriado largo contrae la asistencia debido al traslado del público local hacia otras actividades o destinos.
-                        """)
+                        st.markdown("**Resumen:** Coincidir con un feriado largo reduce la mediana de asistencia frente a un fin de semana regular, confirmando la fuga de demanda local por viajes o turismo emisivo.")
         else:
             st.warning("Por favor, selecciona al menos un equipo en el filtro superior.")
         
