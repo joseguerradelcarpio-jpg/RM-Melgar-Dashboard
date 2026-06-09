@@ -307,14 +307,18 @@ if df_raw is not None:
     with tab3:
         st.markdown("### Análisis de Confort Térmico y Migración")
         
-        # FILTRO DINÁMICO
-        incluir_titanes = st.checkbox("Incluir 'Titanes' (U, Alianza, Cristal, Cienciano) en este análisis", value=False)
+        # FILTRO DINÁMICO POR EQUIPOS
+        equipos_disp = sorted(df_g['visitante'].unique())
+        # Por defecto seleccionamos a todos los equipos orgánicos (excluyendo Titanes)
+        equipos_def = [e for e in equipos_disp if e not in titanes]
         
-        # Filtro lógico
-        if not incluir_titanes:
-            df_clima = df_g[~df_g['visitante'].isin(titanes)].copy()
-        else:
-            df_clima = df_g.copy()
+        equipos_clima = st.multiselect(
+            "Filtro de Rivales: Selecciona qué equipos analizar en este entorno térmico", 
+            options=equipos_disp, 
+            default=equipos_def
+        )
+        
+        df_clima = df_g[df_g['visitante'].isin(equipos_clima)].copy()
         
         if not df_clima.empty and 'factor_sol' in df_clima.columns:
             df_clima['factor_sol'] = df_clima['factor_sol'].fillna('Desconocido')
@@ -359,9 +363,8 @@ if df_raw is not None:
                 st.plotly_chart(fig_share, use_container_width=True)
                 
             st.markdown("""
-            ### 💡 Lectura de Revenue Management
-            * **Gráfico de Cajas (Izquierda):** Evalúa la dispersión y la caída de la mediana. Si la caja de "Sol Intenso" está significativamente por debajo de "Noche", estás evidenciando la destrucción de la demanda.
-            * **Gráfico de Barras (Derecha):** Evalúa el *Upselling Involuntario*. Si el porcentaje de "Oriente" (verde) se encoge durante el "Sol Intenso" y el de "Occidente" (azul) se expande, compruebas que el hincha paga más por la sombra.
+            ### 💡 Conclusión del Análisis
+            El análisis general muestra la clara migración de la tribuna Oriente hacia otras zonas y la menor asistencia total cuando los partidos se juegan expuestos al sol.
             """)
         else:
             st.warning("No hay datos suficientes para los filtros seleccionados.")
