@@ -562,19 +562,24 @@ if df_raw is not None:
             fig_yield = px.scatter(
                 df_elasticidad, x='Ticket_Promedio', y='Asistencia', 
                 color='año', facet_col='Tribuna', 
-                trendline="ols", trendline_scope="overall", # Una sola línea de tendencia general por tribuna
-                title="Evolución de Pricing y Demanda",
+                title="Evolución de Pricing y Demanda por Cohorte Anual",
                 color_discrete_map=paleta_años,
                 hover_data=['Rival']
             )
             
-            fig_yield.update_layout(plot_bgcolor='white', height=500)
-            # Desvincular los ejes para que Sur no se estire con los precios de Occidente
-            fig_yield.update_xaxes(showgrid=True, gridcolor='lightgray', tickprefix="S/ ", matches=None) 
-            fig_yield.update_yaxes(showgrid=True, gridcolor='lightgray', matches=None)
+            # Ajuste de diseño: Fondo blanco, altura y un margen superior (t=80) para los títulos
+            fig_yield.update_layout(
+                plot_bgcolor='white', 
+                height=550, 
+                margin=dict(t=80) 
+            )
             
-            # Limpiar los títulos automáticos molestos de Plotly en los subgráficos
-            fig_yield.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+            # Desvincular ejes para no mezclar los precios de Sur con Occidente
+            fig_yield.update_xaxes(matches=None, showgrid=True, gridcolor='lightgray', tickprefix="S/ ") 
+            fig_yield.update_yaxes(matches=None, showgrid=True, gridcolor='lightgray')
+            
+            # Limpiar títulos automáticos y separarlos del borde del gráfico
+            fig_yield.for_each_annotation(lambda a: a.update(text=f"<b>{a.text.split('=')[-1]}</b>", y=1.05))
             
             st.plotly_chart(fig_yield, use_container_width=True)
             
