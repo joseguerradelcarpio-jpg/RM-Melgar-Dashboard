@@ -359,6 +359,12 @@ if df_raw is not None:
                 st.plotly_chart(fig_share, use_container_width=True)
         else:
             st.warning("No hay datos suficientes para los filtros seleccionados.")
+
+    with tab4: 
+        st.info("Espacio reservado para medir el impacto de la Temporada de Lluvias y la fuga de demanda en Feriados Largos.")
+
+else:
+    st.warning("👈 Por favor, carga tu archivo Excel en el panel lateral para iniciar el simulador.")
                 
             st.markdown("""
             ### 💡 Lectura de RM (Revenue Management)
