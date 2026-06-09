@@ -446,7 +446,41 @@ if df_raw is not None:
             st.warning("No hay datos suficientes para los filtros seleccionados.")
 
     with tab4: 
-        st.info("Espacio reservado para medir el impacto de la Temporada de Lluvias y la fuga de demanda en Feriados Largos.")
+       with tab4:
+        st.markdown("### Análisis de Shocks Ambientales: Lluvia")
+        
+        # Filtro de cuarentena: Solo demanda orgánica para ver la sensibilidad real al clima
+        df_lluvia = df_g[~df_g['visitante'].isin(titanes)].copy()
+        
+        if not df_lluvia.empty and 'temporada_lluvia' in df_lluvia.columns:
+            # Asegurar formato binario/texto para la gráfica
+            df_lluvia['Condicion_Lluvia'] = np.where(df_lluvia['temporada_lluvia'] == 1, 'Temporada de Lluvias', 'Clima Seco')
+            
+            c1, c2 = st.columns([2, 1])
+            
+            with c1:
+                fig_lluvia = px.box(
+                    df_lluvia, x='Condicion_Lluvia', y='Asistencia', 
+                    color='Condicion_Lluvia',
+                    title="Impacto de la Lluvia en la Asistencia Orgánica",
+                    points='all',
+                    color_discrete_sequence=['#607D8B', '#03A9F4']
+                )
+                fig_lluvia.update_layout(showlegend=False, plot_bgcolor='white', xaxis_title=None, yaxis_title="Asistencia")
+                fig_lluvia.update_xaxes(showgrid=True, gridcolor='lightgray')
+                fig_lluvia.update_yaxes(showgrid=True, gridcolor='lightgray')
+                st.plotly_chart(fig_lluvia, use_container_width=True)
+                
+            with c2:
+                st.markdown("<br><br>", unsafe_allow_html=True)
+                st.markdown("""
+                ### 💡 Diagnóstico
+                La lluvia representa una barrera física para el consumidor de eventos al aire libre. 
+                
+                Este gráfico cuantifica la "fuga por clima". Si la mediana de 'Temporada de Lluvias' es inferior, el modelo confirma que el hincha orgánico penaliza la incomodidad de la lluvia, obligando a considerar estrategias de retención (ej. impermeables de cortesía, combos de bebidas calientes o descuentos preventivos).
+                """)
+        else:
+            st.warning("No se encontró la columna 'temporada_lluvia' o no hay datos suficientes.")
 
 else:
     st.warning("👈 Por favor, carga tu archivo Excel en el panel lateral para iniciar el simulador.")
