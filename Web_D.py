@@ -301,5 +301,80 @@ if df_raw is not None:
         df_exp.to_excel(buf, index=False, engine='openpyxl')
         st.download_button("Descargar Excel Calibrado", data=buf.getvalue(), file_name=f"{prefijo}_{fecha}.xlsx")
 
+    with tab2: 
+        st.info("Espacio reservado para diagramas de caja (Boxplots) evaluando el impacto del Día y la Hora de programación.")
+        
+    with tab3:
+        st.markdown("### Análisis de Confort Térmico y Migración de Demanda")
+        st.info("⚠️ Los Titanes Históricos (U, Alianza, Cristal, Cienciano) han sido excluidos automáticamente de esta pestaña para medir el comportamiento orgánico puro.")
+        
+        # Filtro de cuarentena: Solo demanda orgánica
+        df_clima = df_g[~df_g['visitante'].isin(titanes)].copy()
+        
+        if not df_clima.empty and 'factor_sol' in df_clima.columns:
+            # 1. Limpieza de datos y ordenamiento lógico
+            df_clima['factor_sol'] = df_clima['factor_sol'].fillna('Desconocido')
+            df_clima = df_clima[df_clima['factor_sol'] != 'Desconocido']
+            orden_clima = ['Sol Intenso', 'Transición Sombra', 'Noche']
+            
+            c1, c2 = st.columns(2)
+            
+            # Gráfico 1: Impacto en el Volumen Total (Tasa de Abandono)
+            with c1:
+                fig_total = px.box(
+                    df_clima, x='factor_sol', y='Asistencia', 
+                    color='factor_sol', category_orders={'factor_sol': orden_clima},
+                    title="1. Impacto en Asistencia Total (Tasa de Abandono)",
+                    color_discrete_sequence=['#FFC107', '#FF9800', '#3F51B5']
+                )
+                fig_total.update_layout(
+                    showlegend=False, 
+                    xaxis_title="Condición Térmica", 
+                    yaxis_title="Asistencia Orgánica Total",
+                    plot_bgcolor='white'
+                )
+                fig_total.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+                fig_total.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+                st.plotly_chart(fig_total, use_container_width=True)
+                
+            # Gráfico 2: Migración de Tribunas (Análisis de Share Porcentual)
+            with c2:
+                # Agrupamos promedios absolutos para ver la proporción
+                tribunas = ['asistentes_sur', 'asistentes_oriente', 'asistentes_occidente']
+                df_promedios = df_clima.groupby('factor_sol')[tribunas].mean().reset_index()
+                
+                # Transformar datos para Plotly (Melt)
+                df_melt = df_promedios.melt(id_vars='factor_sol', value_vars=tribunas, var_name='Tribuna', value_name='Promedio_Asistentes')
+                
+                # Limpiar los nombres de las tribunas para que se vean bien en la leyenda
+                df_melt['Tribuna'] = df_melt['Tribuna'].str.replace('asistentes_', '').str.capitalize()
+                
+                fig_share = px.bar(
+                    df_melt, x='factor_sol', y='Promedio_Asistentes', color='Tribuna',
+                    category_orders={'factor_sol': orden_clima},
+                    title="2. Distribución y Migración Interna (Share %)",
+                    barmode='100%', # Convierte barras absolutas en porcentajes
+                    text_auto='.1f',
+                    color_discrete_map={'Sur': '#F44336', 'Oriente': '#4CAF50', 'Occidente': '#2196F3'}
+                )
+                fig_share.update_layout(
+                    xaxis_title="Condición Térmica", 
+                    yaxis_title="Participación de Mercado (%)",
+                    plot_bgcolor='white'
+                )
+                fig_share.update_traces(texttemplate='%{value:.1f}%', textposition='inside')
+                st.plotly_chart(fig_share, use_container_width=True)
+                
+            st.markdown("""
+            ### 💡 Lectura de RM (Revenue Management)
+            * **Gráfico de Cajas (Izquierda):** Evalúa la dispersión y la caída de la mediana. Si la caja de "Sol Intenso" está significativamente por debajo de "Noche", estás evidenciando la destrucción de la demanda.
+            * **Gráfico de Barras (Derecha):** Evalúa el *Upselling Involuntario*. Si el porcentaje de "Oriente" (verde) se encoge durante el "Sol Intenso" y el de "Occidente" (azul) se expande, compruebas que el hincha paga más por la sombra.
+            """)
+        else:
+            st.warning("No hay suficientes datos o falta la columna 'factor_sol' para procesar este análisis.")
+
+    with tab4: 
+        st.info("Espacio reservado para medir el impacto de la Temporada de Lluvias y la fuga de demanda en Feriados Largos.")
+
 else:
-    st.warning("Carga el archivo Excel en el panel lateral.")
+    st.warning("👈 Por favor, carga tu archivo Excel en el panel lateral para iniciar el simulador.")
