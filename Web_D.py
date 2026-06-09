@@ -190,12 +190,14 @@ else:
     st.stop() 
 
 if df_raw is not None:
+    # === LA BALA DE PLATA: Limpiamos los títulos de Excel de espacios invisibles ===
+    df_raw.columns = df_raw.columns.str.strip()
+    
     df_proc = procesar_datos(df_raw, dict(st.session_state))
     
     df_g = df_proc[(df_proc['local'] == 'FBC Melgar') & (df_proc['Asistencia'].notna())].copy()
     df_g['año'] = df_g['año'].astype(str)
     
-    # Blindaje matemático absoluto para la división de ingresos y asistencia
     df_g['Yield_Total'] = (pd.to_numeric(df_g['Ingresos'], errors='coerce') / pd.to_numeric(df_g['Asistencia'], errors='coerce')).round(2)
     df_g['Yield_Total'] = df_g['Yield_Total'].fillna(0)
     
@@ -226,12 +228,13 @@ if df_raw is not None:
             df_plot['Hover_Yield'] = pd.to_numeric(df_plot['Yield_Total'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
             df_plot['Fecha_Corta'] = df_plot['fecha_real'].astype(str).str[:10]
 
+            # CORRECCIÓN DE COLUMNA: Usamos la nueva variable limpia "pos_local_acumulado_jornada"
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
                 color_discrete_map=cmap,
                 title=titulo,
-                custom_data=['visitante', 'Fecha_Corta', 'posicion_local', 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
+                custom_data=['visitante', 'Fecha_Corta', 'pos_local_acumulado_jornada', 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
             )
             
             fig.update_traces(
