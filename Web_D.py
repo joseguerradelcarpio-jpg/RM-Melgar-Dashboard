@@ -224,7 +224,6 @@ if df_raw is not None:
             df_plot = df_subset.copy()
             if seleccionados:
                 df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
-                # Equipos no seleccionados -> Gris y sin texto
                 df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['año'], 'Otros')
                 df_plot['Texto_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['visitante'], '')
                 cmap = {**paleta, 'Otros': '#E0E0E0'}
@@ -239,40 +238,30 @@ if df_raw is not None:
                 color_discrete_map=cmap,
                 title=titulo,
                 hover_data={
-                    'ipm_local_5': ':.2f', 'Asistencia': ':,.0f', 
-                    'Yield_Total': ':.2f', 'factor_sol': True, 'año': False,
-                    'Color_Final': False, 'Texto_Final': False
-                }
-            )
-            # ... tu código actual ...
-            fig = px.scatter(
-                df_plot, x='ipm_local_5', y='Asistencia', 
-                color='Color_Final', text='Texto_Final',
-                color_discrete_map=cmap,
-                title=titulo,
-                hover_data={
-                    'ipm_local_5': ':.2f', 'Asistencia': ':,.0f', 
-                    'Yield_Total': ':.2f', 'factor_sol': True, 'año': False,
-                    'Color_Final': False, 'Texto_Final': False
+                    'ipm_local_5': ':.2f', 
+                    'Asistencia': ':,.0f', 
+                    'Yield_Total': ':.2f', 
+                    'factor_sol': True, 
+                    'Ingresos': ':,.2f', # <-- AQUÍ ESTÁ AGREGADO EL INGRESO
+                    'año': False,
+                    'Color_Final': False, 
+                    'Texto_Final': False
                 }
             )
             
             # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
             df_trend = df_plot[['ipm_local_5', 'Asistencia']].dropna()
             
-            if len(df_trend) > 2: # Evita errores si hay muy pocos datos al filtrar
+            if len(df_trend) > 2: 
                 x_val = df_trend['ipm_local_5'].values
                 y_val = df_trend['Asistencia'].values
                 
-                # Regresión OLS para precisión estadística
                 X_sm = sm.add_constant(x_val)
                 modelo = sm.OLS(y_val, X_sm).fit()
                 
-                # Array para trazar la línea y la sombra fluidamente
                 x_lin = np.linspace(x_val.min(), x_val.max(), 100)
                 X_pred = sm.add_constant(x_lin)
                 
-                # Extracción del Intervalo de Confianza (95%)
                 predicciones = modelo.get_prediction(X_pred)
                 df_pred = predicciones.summary_frame(alpha=0.05)
                 
@@ -280,18 +269,16 @@ if df_raw is not None:
                 ci_lower = df_pred['mean_ci_lower']
                 ci_upper = df_pred['mean_ci_upper']
                 
-                # 1. Capa de la Sombra (Intervalo de Confianza)
                 fig.add_trace(go.Scatter(
                     x=np.concatenate([x_lin, x_lin[::-1]]),
                     y=np.concatenate([ci_upper, ci_lower[::-1]]),
                     fill='toself',
-                    fillcolor='rgba(200, 200, 200, 0.4)', # Gris transparente idéntico a la imagen
+                    fillcolor='rgba(200, 200, 200, 0.4)', 
                     line=dict(color='rgba(255,255,255,0)'),
                     hoverinfo="skip",
                     showlegend=False
                 ))
                 
-                # 2. Capa de la Línea de Tendencia (Punteada negra)
                 fig.add_trace(go.Scatter(
                     x=x_lin, y=y_lin,
                     mode='lines',
@@ -300,16 +287,14 @@ if df_raw is not None:
                     showlegend=False
                 ))
                 
-                # 3. Ajuste Visual: Movemos la sombra y la línea al fondo
-                # para que los puntos y el cross-highlighting queden por encima
                 fig.data = fig.data[-2:] + fig.data[:-2]
             # === FIN DE NUEVO CÓDIGO ===
-
             
             fig.update_traces(
                 marker=dict(size=14, line=dict(width=1, color='black')),
                 textposition='top right',
-                hovertemplate="<b>%{text}</b><br>IPM: %{x}<br>Asist: %{y}<br>Yield: S/ %{customdata[0]}<br>Sol: %{customdata[1]}<extra></extra>"
+                # <-- AQUÍ AGREGAMOS LA LÍNEA PARA QUE SE MUESTRE EL INGRESO
+                hovertemplate="<b>%{text}</b><br>IPM: %{x}<br>Asist: %{y}<br>Yield: S/ %{customdata[0]}<br>Sol: %{customdata[1]}<br>Ingresos: S/ %{customdata[2]}<extra></extra>"
             )
             
             fig.update_layout(
