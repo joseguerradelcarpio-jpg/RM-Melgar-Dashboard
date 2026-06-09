@@ -222,6 +222,10 @@ if df_raw is not None:
         def plot_master(df_subset, titulo):
             # Lógica de Cross-Highlighting
             df_plot = df_subset.copy()
+            
+            # ---> LA SOLUCIÓN: Convertir Ingresos a número puro para que Plotly no lo oculte
+            df_plot['Ingresos'] = pd.to_numeric(df_plot['Ingresos'], errors='coerce').fillna(0)
+
             if seleccionados:
                 df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
                 df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['año'], 'Otros')
@@ -242,7 +246,7 @@ if df_raw is not None:
                     'Asistencia': ':,.0f', 
                     'Yield_Total': ':.2f', 
                     'factor_sol': True, 
-                    'Ingresos': ':,.2f', # <-- AQUÍ ESTÁ AGREGADO EL INGRESO
+                    'Ingresos': ':,.2f',  # Ahora que es número estricto, Plotly sí lo leerá
                     'año': False,
                     'Color_Final': False, 
                     'Texto_Final': False
@@ -293,7 +297,6 @@ if df_raw is not None:
             fig.update_traces(
                 marker=dict(size=14, line=dict(width=1, color='black')),
                 textposition='top right',
-                # <-- AQUÍ AGREGAMOS LA LÍNEA PARA QUE SE MUESTRE EL INGRESO
                 hovertemplate="<b>%{text}</b><br>IPM: %{x}<br>Asist: %{y}<br>Yield: S/ %{customdata[0]}<br>Sol: %{customdata[1]}<br>Ingresos: S/ %{customdata[2]}<extra></extra>"
             )
             
