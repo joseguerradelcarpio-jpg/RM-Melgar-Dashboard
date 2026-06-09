@@ -220,9 +220,19 @@ if df_raw is not None:
         paleta = {'2023': '#D32F2F', '2024': '#1976D2', '2025': '#388E3C', '2026': '#FF8F00'}
         
         def plot_master(df_subset, titulo):
-            # Lógica de Cross-Highlighting
             df_plot = df_subset.copy()
             
+            # --- LIMPIEZA QUIRÚRGICA ---
+            # Forzamos a que sean números, eliminamos errores y rellenamos vacíos con 0
+            df_plot['Asistencia'] = pd.to_numeric(df_plot['Asistencia'], errors='coerce').fillna(0)
+            df_plot['Ingresos'] = pd.to_numeric(df_plot['Ingresos'], errors='coerce').fillna(0)
+            df_plot['Yield_Total'] = pd.to_numeric(df_plot['Yield_Total'], errors='coerce').fillna(0)
+
+            # --- PREPARACIÓN DE TEXTO ---
+            # Si el número es 0, aparecerá "S/ 0.00" en lugar de desaparecer
+            df_plot['Texto_Yield'] = df_plot['Yield_Total'].apply(lambda x: f"{x:,.2f}")
+            df_plot['Texto_Ingresos'] = df_plot['Ingresos'].apply(lambda x: f"{x:,.2f}")
+
             if seleccionados:
                 df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
                 df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['año'], 'Otros')
@@ -233,75 +243,47 @@ if df_raw is not None:
                 df_plot['Texto_Final'] = df_plot['visitante']
                 cmap = paleta
 
-            # --- LA ESTRATEGIA INFALIBLE ---
-            # Formateamos los números a texto directamente en Pandas antes del gráfico
-            df_plot['Texto_Yield'] = df_plot['Yield_Total'].apply(lambda x: f"{x:,.2f}")
-            df_plot['Texto_Ingresos'] = df_plot['Ingresos'].apply(lambda x: f"{x:,.2f}")
-
-            # Usamos custom_data (una lista exacta) en lugar del hover_data confuso
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
                 color_discrete_map=cmap,
                 title=titulo,
-                custom_data=['Texto_Yield', 'factor_sol', 'Texto_Ingresos'] # Índice 0, 1 y 2 estrictos
+                custom_data=['Texto_Yield', 'factor_sol', 'Texto_Ingresos']
             )
             
-            # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
+            # === Lógica OLS (Igual que antes) ===
             df_trend = df_plot[['ipm_local_5', 'Asistencia']].dropna()
-            
             if len(df_trend) > 2: 
                 x_val = df_trend['ipm_local_5'].values
                 y_val = df_trend['Asistencia'].values
-                
                 X_sm = sm.add_constant(x_val)
                 modelo = sm.OLS(y_val, X_sm).fit()
-                
                 x_lin = np.linspace(x_val.min(), x_val.max(), 100)
                 X_pred = sm.add_constant(x_lin)
-                
                 predicciones = modelo.get_prediction(X_pred)
                 df_pred = predicciones.summary_frame(alpha=0.05)
                 
-                y_lin = df_pred['mean']
-                ci_lower = df_pred['mean_ci_lower']
-                ci_upper = df_pred['mean_ci_upper']
-                
-                # Capa de la Sombra
                 fig.add_trace(go.Scatter(
                     x=np.concatenate([x_lin, x_lin[::-1]]),
-                    y=np.concatenate([ci_upper, ci_lower[::-1]]),
-                    fill='toself',
-                    fillcolor='rgba(200, 200, 200, 0.4)', 
-                    line=dict(color='rgba(255,255,255,0)'),
-                    hoverinfo="skip",
-                    showlegend=False
+                    y=np.concatenate([df_pred['mean_ci_upper'], df_pred['mean_ci_lower'][::-1]]),
+                    fill='toself', fillcolor='rgba(200, 200, 200, 0.4)', 
+                    line=dict(color='rgba(255,255,255,0)'), hoverinfo="skip", showlegend=False
                 ))
-                
-                # Capa de la Línea
                 fig.add_trace(go.Scatter(
-                    x=x_lin, y=y_lin,
-                    mode='lines',
+                    x=x_lin, y=df_pred['mean'], mode='lines',
                     line=dict(color='black', width=2, dash='dash'),
-                    hoverinfo="skip",
-                    showlegend=False
+                    hoverinfo="skip", showlegend=False
                 ))
-                
-                # Movemos la sombra al fondo
                 fig.data = fig.data[-2:] + fig.data[:-2]
-            # === FIN DE NUEVO CÓDIGO ===
-            
-            # Plantilla estricta llamando a los índices 0, 1 y 2
+
+            # --- HOVER FINAL ---
             fig.update_traces(
                 marker=dict(size=14, line=dict(width=1, color='black')),
                 textposition='top right',
                 hovertemplate="<b>%{text}</b><br>IPM: %{x:.2f}<br>Asist: %{y:,.0f}<br>Yield: S/ %{customdata[0]}<br>Sol: %{customdata[1]}<br>Ingresos: S/ %{customdata[2]}<extra></extra>"
             )
             
-            fig.update_layout(
-                legend=dict(orientation="v", yanchor="top", y=0.99, xanchor="left", x=0.01),
-                xaxis_title="Momentum (IPM)", yaxis_title="Asistencia", height=600
-            )
+            fig.update_layout(height=600)
             return fig
 
         with c1: st.plotly_chart(plot_master(df_g[~df_g['visitante'].isin(titanes)], "Demanda Bajos"), use_container_width=True)
