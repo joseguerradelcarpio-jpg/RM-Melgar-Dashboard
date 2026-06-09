@@ -224,6 +224,7 @@ if df_raw is not None:
             df_plot = df_subset.copy()
             if seleccionados:
                 df_plot['Es_Resaltado'] = df_plot['visitante'].isin(seleccionados)
+                # Equipos no seleccionados -> Gris y sin texto
                 df_plot['Color_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['año'], 'Otros')
                 df_plot['Texto_Final'] = np.where(df_plot['Es_Resaltado'], df_plot['visitante'], '')
                 cmap = {**paleta, 'Otros': '#E0E0E0'}
@@ -232,37 +233,30 @@ if df_raw is not None:
                 df_plot['Texto_Final'] = df_plot['visitante']
                 cmap = paleta
 
-            # Preparar textos formateados para la tarjeta flotante
-            df_plot['Hover_Asistencia'] = df_plot['Asistencia'].apply(lambda x: f"{x:,.0f}")
-            df_plot['Hover_Ingresos'] = df_plot['Ingresos'].apply(lambda x: f"S/ {x:,.2f}")
-            df_plot['Hover_Yield'] = df_plot['Ticket_Promedio'].apply(lambda x: f"S/ {x:,.2f}")
-            # Extraer solo la fecha (Y-M-D)
-            df_plot['Fecha_Corta'] = df_plot['fecha_real'].astype(str).str[:10]
-
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
                 color_discrete_map=cmap,
                 title=titulo,
-                custom_data=['visitante', 'Fecha_Corta', 'pos_tabla', 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
+                hover_data={
+                    'ipm_local_5': ':.2f', 'Asistencia': ':,.0f', 
+                    'Yield_Total': ':.2f', 'factor_sol': True, 'año': False,
+                    'Color_Final': False, 'Texto_Final': False
+                }
+            )
+            # ... tu código actual ...
+            fig = px.scatter(
+                df_plot, x='ipm_local_5', y='Asistencia', 
+                color='Color_Final', text='Texto_Final',
+                color_discrete_map=cmap,
+                title=titulo,
+                hover_data={
+                    'ipm_local_5': ':.2f', 'Asistencia': ':,.0f', 
+                    'Yield_Total': ':.2f', 'factor_sol': True, 'año': False,
+                    'Color_Final': False, 'Texto_Final': False
+                }
             )
             
-            # Plantilla estricta del recuadro al pasar el mouse
-            fig.update_traces(
-                marker=dict(size=14, line=dict(width=1, color='black')),
-                textposition='top right',
-                hovertemplate=(
-                    "<b>%{customdata[0]}</b><br>" +
-                    "Fecha: %{customdata[1]}<br>" +
-                    "Posición Acumulada: %{customdata[2]}<br>" +
-                    "Clima: %{customdata[3]} | Hora: %{customdata[4]}<br>" +
-                    "Asistencia: %{customdata[5]}<br>" +
-                    "Recaudación: %{customdata[6]}<br>" +
-                    "Ticket Promedio: %{customdata[7]}<extra></extra>"
-                )
-            )
-            
-            # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
             # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
             df_trend = df_plot[['ipm_local_5', 'Asistencia']].dropna()
             
