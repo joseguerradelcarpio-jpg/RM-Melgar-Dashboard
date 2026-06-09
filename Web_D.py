@@ -232,19 +232,21 @@ if df_raw is not None:
                 df_plot['Texto_Final'] = df_plot['visitante']
                 cmap = paleta
 
-            # Preparar textos formateados para la tarjeta flotante
-            df_plot['Hover_Asistencia'] = df_plot['Asistencia'].apply(lambda x: f"{x:,.0f}")
-            df_plot['Hover_Ingresos'] = df_plot['Ingresos'].apply(lambda x: f"S/ {x:,.2f}")
-            df_plot['Hover_Yield'] = df_plot['Yield_Total'].apply(lambda x: f"S/ {x:,.2f}")
+            # Preparar textos formateados (BLINDADO MATEMÁTICAMENTE CONTRA NULOS)
+            df_plot['Hover_Asistencia'] = pd.to_numeric(df_plot['Asistencia'], errors='coerce').fillna(0).apply(lambda x: f"{x:,.0f}")
+            df_plot['Hover_Ingresos'] = pd.to_numeric(df_plot['Ingresos'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
+            df_plot['Hover_Yield'] = pd.to_numeric(df_plot['Yield_Total'], errors='coerce').fillna(0).apply(lambda x: f"S/ {x:,.2f}")
+            
             # Extraer solo la fecha (Y-M-D)
             df_plot['Fecha_Corta'] = df_plot['fecha_real'].astype(str).str[:10]
 
+            # CORRECCIÓN DE BUG: Se cambió 'pos_tabla' por 'posicion_local' (que sí existe en tu Excel)
             fig = px.scatter(
                 df_plot, x='ipm_local_5', y='Asistencia', 
                 color='Color_Final', text='Texto_Final',
                 color_discrete_map=cmap,
                 title=titulo,
-                custom_data=['visitante', 'Fecha_Corta', 'pos_tabla', 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
+                custom_data=['visitante', 'Fecha_Corta', 'posicion_local', 'factor_sol', 'hora', 'Hover_Asistencia', 'Hover_Ingresos', 'Hover_Yield']
             )
             
             # Plantilla estricta del recuadro al pasar el mouse
@@ -262,7 +264,6 @@ if df_raw is not None:
                 )
             )
             
-            # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
             # === INICIO DE NUEVO CÓDIGO: TENDENCIA OLS Y SOMBRA DE CONFIANZA ===
             df_trend = df_plot[['ipm_local_5', 'Asistencia']].dropna()
             
@@ -307,16 +308,8 @@ if df_raw is not None:
                 ))
                 
                 # 3. Ajuste Visual: Movemos la sombra y la línea al fondo
-                # para que los puntos y el cross-highlighting queden por encima
                 fig.data = fig.data[-2:] + fig.data[:-2]
             # === FIN DE NUEVO CÓDIGO ===
-
-            
-            fig.update_traces(
-                marker=dict(size=14, line=dict(width=1, color='black')),
-                textposition='top right',
-                hovertemplate="<b>%{text}</b><br>IPM: %{x}<br>Asist: %{y}<br>Yield: S/ %{customdata[0]}<br>Sol: %{customdata[1]}<extra></extra>"
-            )
             
             fig.update_layout(
                 legend=dict(orientation="v", yanchor="top", y=0.99, xanchor="left", x=0.01),
